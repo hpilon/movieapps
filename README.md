@@ -8,7 +8,7 @@ To pursue this interest independently, I developed a small Python application (B
 
 ![flow](./draw.io-diagrams/overview-Overview.drawio.svg)
 
-# Inventory for this solution utilizing GitLab CE version v17.9.0 , JFROG Container Registry 7.98.7, and MongoDB version 8.0.4 
+# Sotware inventory for this solution is utilizing GitLab CE version v17.9.0 , JFROG Container Registry 7.98.7, and MongoDB version 8.0.4 
 
 - System Name:  kind27      
    
