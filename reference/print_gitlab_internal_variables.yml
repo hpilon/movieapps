@@ -1,0 +1,161 @@
+.print_gitlab_internal_variables:
+ script:
+    - hostname
+    - id
+    - echo "+++" > temp_gitlab_internal_variables.txt
+    - echo " " >> temp_gitlab_internal_variables.txt
+    - echo "https://docs.gitlab.com/ee/ci/variables/predefined_variables.html" >> temp_gitlab_internal_variables.txt
+    - echo "CI_DEPLOY_USER ==> $CI_DEPLOY_USER"  >> temp_gitlab_internal_variables.txt
+    - echo "GITLAB_USER_EMAIL ==> $GITLAB_USER_EMAIL"  >> temp_gitlab_internal_variables.txt
+    - echo "GITLAB_USER_ID ==> $GITLAB_USER_ID"  >> temp_gitlab_internal_variables.txt
+    - echo "GITLAB_USER_LOGIN ==> $GITLAB_USER_LOGIN" >> temp_gitlab_internal_variables.txt
+    - echo "GITLAB_USER_NAME ==> $GITLAB_USER_NAME"  >> temp_gitlab_internal_variables.txt
+    - echo "CI_BUILDS_DIR ==> $CI_BUILDS_DIR"  >> temp_gitlab_internal_variables.txt
+    - echo "CI_COMMIT_AUTHOR ==> $CI_COMMIT_AUTHOR"  >> temp_gitlab_internal_variables.txt 
+    - echo "CI_COMMIT_BRANCH ==> $CI_COMMIT_BRANCH"  >> temp_gitlab_internal_variables.txt
+    - echo "CI_COMMIT_REF_NAME ==> $CI_COMMIT_REF_NAME"   >> temp_gitlab_internal_variables.txt       
+    - echo "CI_COMMIT_REF_SLUG ==> $CI_COMMIT_REF_SLUG"  >> temp_gitlab_internal_variables.txt
+    - echo "CI_COMMIT_SHA ==> $CI_COMMIT_SHA"  >> temp_gitlab_internal_variables.txt
+    - echo "CI_COMMIT_SHORT_SHA ==> $CI_COMMIT_SHORT_SHA"  >> temp_gitlab_internal_variables.txt
+    - echo "CI_DEFAULT_BRANCH ==> $CI_DEFAULT_BRANCH"  >> temp_gitlab_internal_variables.txt
+    - echo "CI_ENVIRONMENT_NAME ==> $CI_ENVIRONMENT_NAME"  >> temp_gitlab_internal_variables.txt
+    - echo "CI_ENVIRONMENT_SLUG ==> $CI_ENVIRONMENT_SLUG"  >> temp_gitlab_internal_variables.txt
+    - echo "CI_ENVIRONMENT_URL ==> $CI_ENVIRONMENT_URL"  >> temp_gitlab_internal_variables.txt
+    - echo "CI_ENVIRONMENT_ACTION ==> $CI_ENVIRONMENT_ACTION"  >> temp_gitlab_internal_variables.txt
+    - echo "CI_ENVIRONMENT_TIER ==> $CI_ENVIRONMENT_TIER" >> temp_gitlab_internal_variables.txt
+    - echo " " >> temp_gitlab_internal_variables.txt    
+    - echo "CI_CONCURRENT_PROJECT_ID ==> $CI_CONCURRENT_PROJECT_ID" >> temp_gitlab_internal_variables.txt
+    - echo "CI_PROJECT_ID ==> $CI_PROJECT_ID" >> temp_gitlab_internal_variables.txt
+    - echo "CI_API_V4_URL ==> $CI_API_V4_URL" >> temp_gitlab_internal_variables.txt
+    - echo "CI_API_GRAPHQL_URL ==> $I_API_GRAPHQL_URL" >> temp_gitlab_internal_variables.txt
+    - echo " " >> temp_gitlab_internal_variables.txt
+    - echo "PRIMARY_REPO_OWNER ==>$PRIMARY_REPO_OWNER" >> temp_gitlab_internal_variables.txt
+    - echo " " >> temp_gitlab_internal_variables.txt
+    - echo "+++" >> temp_gitlab_internal_variables.txt
+    - echo " " >> temp_gitlab_internal_variables.txt
+    - cat temp_gitlab_internal_variables.txt
+    - rm temp_gitlab_internal_variables.txt   
+    #
+    # We need to ensure all the required project GitLab CI/CD variables are not empty
+    #
+    - FOUND_VARIABLE_MISSING="N"
+    #
+    - if [ "$CI_JFROG_REGISTRY_USER" == "" ] ; then
+    -    echo "The GitLab CI/CD internal variable CI_JFROG_REGISTRY_USER is empty"
+    -    echo " Review or execute this script OPTIONAL-curl-command.sh to address the issues"
+    -    FOUND_VARIABLE_MISSING="Y"
+    - fi
+    #
+    - if [ "$CI_JFROG_REGISTRY_PASSWORD" == "" ] ; then
+    -    echo "The GitLab CI/CD internal variable  CI_JFROG_REGISTRY_PASSWORD is empty"
+    -    echo " Review or execute this script OPTIONAL-curl-command.sh to address the issues"
+    -    FOUND_VARIABLE_MISSING="Y"
+    - fi    
+    #
+    - if [ "$GITLAB_USER_NAME" == "test1" ]; then 
+    -    if [ "$TEST1_MONGO_APP_DB_USER" == "" ] ; then
+    -       echo "The GitLab CI/CD internal variable TEST1_MONGO_APP_DB_USER is empty"
+    -       echo " Review or execute this script OPTIONAL-curl-command.sh to address the issues"
+    -       FOUND_VARIABLE_MISSING="Y"
+    -    fi   
+    -    if [ "$TEST1_MONGO_APP_DB_PASS" == "" ] ; then
+    -       echo "The GitLab CI/CD internal variable TEST1_MONGO_APP_DB_PASS is empty"
+    -       echo " Review or execute this script OPTIONAL-curl-command.sh to address the issues"
+    -       FOUND_VARIABLE_MISSING="Y"
+    -    fi 
+    #  
+    -    if [ "$CI_COMMIT_BRANCH" == "main" ] ; then 
+    -       if [ "$PRODUCTION_MONGO_APP_DB_USER" == "" ] ; then
+    -          echo "The GitLab CI/CD internal variable is PRODUCTION_MONGO_APP_DB_USER is empty"
+    -          echo " Review or execute this script OPTIONAL-curl-command.sh to address the issues"
+    -          FOUND_VARIABLE_MISSING="Y"
+    -       fi
+    #
+    -       if [ "$PRODUCTION_MONGO_APP_DB_PASS" == "" ] ; then
+    -          echo "The GitLab CI/CD internal variable PRODUCTION_MONGO_APP_DB_PASS is empty"
+    -          echo " Review or execute this script OPTIONAL-curl-command.sh to address the issues"
+    -          FOUND_VARIABLE_MISSING="Y" 
+    -       fi     
+    #
+    -       if [ "$STAGING_MONGO_APP_DB_USER" == "" ] ; then
+    -          echo "The GitLab CI/CD internal variable STAGING_MONGO_APP_DB_USER is empty"
+    -          echo " Review or execute this script OPTIONAL-curl-command.sh to address the issues"
+    -          FOUND_VARIABLE_MISSING="Y" 
+    -       fi
+    #
+    -       if [ "$STAGING_MONGO_APP_DB_PASS" == "" ] ; then
+    -          echo "The GitLab CI/CD internal variable STAGING_MONGO_APP_DB_PASS is empty"
+    -          echo " Review or execute this script OPTIONAL-curl-command.sh to address the issues"
+    -          FOUND_VARIABLE_MISSING="Y" 
+    -       fi 
+    #   
+    -       if [ "$PRODUCTION_MICROK8S_JFROG_TOKEN" == "" ] ; then
+    -          echo "The GitLab CI/CD internal variable PRODUCTION_MICROK8S_JFROG_TOKEN is empty"
+    -          echo " Review or execute this script OPTIONAL-curl-command.sh to address the issues"
+    -          FOUND_VARIABLE_MISSING="Y" 
+    -      fi    
+    -   fi   
+    - fi
+   #
+    - if [ "$GITLAB_USER_NAME" == "test2" ]; then 
+    -    if [ "$TEST2_MONGO_APP_DB_USER" == "" ] ; then
+    -       echo "The GitLab CI/CD internal variable  TEST2_MONGO_APP_DB_USER is empty"
+    -       echo " Review or execute this script OPTIONAL-curl-command.sh to address the issues"
+    -       FOUND_VARIABLE_MISSING="Y"
+    -    fi   
+    -    if [ "$TEST2_MONGO_APP_DB_PASS" == "" ] ; then
+    -       echo "The GitLab CI/CD internal variable TEST2_MONGO_APP_DB_PASS is empty"
+    -       echo " Review or execute this script OPTIONAL-curl-command.sh to address the issues"
+    -       FOUND_VARIABLE_MISSING="Y"
+    -    fi   
+    - fi
+    #
+    - if [ "$GITLAB_USER_NAME" == "test3" ]; then 
+    -    if [ "$TEST3_MONGO_APP_DB_USER" == "" ] ; then
+    -       echo "The GitLab CI/CD internal variable TEST3_MONGO_APP_DB_USER is empty"
+    -       echo " Review or execute this script OPTIONAL-curl-command.sh to address the issues"
+    -       FOUND_VARIABLE_MISSING="Y"
+    -    fi   
+    -    if [ "$TEST3_MONGO_APP_DB_PASS" == "" ] ; then
+    -       echo "The GitLab CI/CD internal variable TEST3_MONGO_APP_DB_PASS is empty"
+    -       echo " Review or execute this script OPTIONAL-curl-command.sh to address the issues"
+    -       FOUND_VARIABLE_MISSING="Y"
+    -    fi   
+    - fi
+    #
+    - if [ "$GITLAB_USER_NAME" == "test4" ]; then 
+    -    if [ "$TEST4_MONGO_APP_DB_USER" == "" ] ; then
+    -       echo "The GitLab CI/CD internal variable TEST4_MONGO_APP_DB_USER is empty"
+    -       echo " Review or execute this script OPTIONAL-curl-command.sh to address the issues"
+    -       FOUND_VARIABLE_MISSING="Y"
+    -    fi   
+    -    if [ "$TEST4_MONGO_APP_DB_PASS" == "" ] ; then
+    -       echo "The GitLab CI/CD internal variable TEST4_MONGO_APP_DB_PASS is empty"
+    -       echo " Review or execute this script OPTIONAL-curl-command.sh to address the issues"
+    -       FOUND_VARIABLE_MISSING="Y"
+    -    fi   
+    - fi
+    # 
+    - if [ "$MONGO_ADMIN_DB_USER" == "" ] ; then
+    -    echo "The GitLab CI/CD internal variable MONGO_ADMIN_DB_USER is empty"
+    -    echo " Review or execute this script OPTIONAL-curl-command.sh to address the issues"
+    -    FOUND_VARIABLE_MISSING="Y"
+    - fi  
+    # 
+    - if [ "$MONGO_ADMIN_DB_PASS" == "" ] ; then
+    -    echo "The GitLab CI/CD internal variable MONGO_ADMIN_DB_PASS is empty"
+    -    echo " Review or execute this script OPTIONAL-curl-command.sh to address the issues"
+    -    FOUND_VARIABLE_MISSING="Y" 
+    - fi 
+    #
+    - if [ "$FOUND_VARIABLE_MISSING" == "Y" ] ; then 
+    -    echo "Found one or many GitLAB internal CI/CD internal variable missing"
+    -    echo "This need to be address before we can continue"
+    -    echo "Review or execute this script OPTIONAL-curl-command.sh to address the issue(s)"
+    -    exit 1 # Invalid argument to 
+    - else 
+    -    echo "Looks good , it appears all the required CI/CD internal variable are present"
+    - fi      
+
+
+

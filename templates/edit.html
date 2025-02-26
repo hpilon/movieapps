@@ -1,0 +1,49 @@
+{% extends 'template.html' %}
+
+{% block head %}
+<title>Edit Movie</title>
+{% endblock %}
+
+{% block body %}
+<div class="container">
+    <h1>Edit Movie</h1>
+    <form action="/edit/{{ mov._id }}" method="POST">
+        <label for="title">Title of movie (max of 30 characters):</label>
+        <input type="text" id="title" name="title" maxlength="30" size="30" value="{{ mov.title }}" required><br><br>
+        
+        <label>Movie Format (DVD/Blue-Ray)::</label>
+        <input type="radio" id="dvd" name="format" value="UNKNOWN" {% if mov.format == '' %} checked {% endif %}> UNKNOWN
+        <input type="radio" id="dvd" name="format" value="DVD" {% if mov.format == 'DVD' %} checked {% endif %}> DVD
+        <input type="radio" id="blu-ray" name="format" value="Blu-Ray" {% if mov.format == 'Blu-Ray' %} checked {% endif %}> Blu Ray<br><br>
+
+        <label for="Director">Director (max of 25 characters):</label>
+        <input type="text" id="director" name="director" maxlength="25" value="{{ mov.director }}" required><br><br>
+
+        <!-- Dropdown list for item -->
+        <label for="location">Location:</label>
+        <select id="location" name="location" required>
+		     <option value="{{mov.location}}">{{mov.location}}</option>
+            <option value="Basement">Basement</option>
+            <option value="Family room">Family room</option>
+            <option value="Office">Office</option>
+        </select><br><br>
+		
+        <label for="comments">Comments (max of 50 characters):</label>
+        <input type="text" id="comments" name="comments" maxlength="50" value="{{ mov.comments }}" required><br><br>
+
+        <input type="submit" value="Save Changes">
+    </form>
+</div>
+
+<script>
+       document.querySelector('form').addEventListener('submit', function(event) {
+       // Check if any radio button is selected
+       if (!document.querySelector('input[name="format"]:checked')) {
+          event.preventDefault(); // Prevent form submission
+          alert('Please select a Movie Format option.');
+          }
+      });
+</script>
+
+
+{% endblock %}

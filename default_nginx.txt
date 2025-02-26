@@ -1,0 +1,15 @@
+server {
+    listen 80 default_server;
+    server_name _;
+
+    # Return a 403 Forbidden with a custom message
+    location / {
+        return 403 "Access Denied: Invalid Host Header\n";
+    }
+
+    # Optional: Serve an HTML error page instead
+    error_page 403 /custom-403.html;
+    location = /custom-403.html {
+        root /usr/share/nginx/html;
+    }
+}

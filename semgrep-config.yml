@@ -1,0 +1,14 @@
+rules:
+  - id: no-print-statements
+    patterns:
+      - pattern: print(...)
+    message: "Avoid using print statements in production code."
+    languages: [python]
+    severity: WARNING
+
+  - id: no-hardcoded-passwords
+    patterns:
+      - pattern: password = "$SECRET"
+    message: "Avoid hardcoding passwords; use environment variables or secret management."
+    languages: [python]
+    severity: ERROR

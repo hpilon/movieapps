@@ -1,0 +1,82 @@
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${NAME_SPACE}
+---
+# Secret for Docker Registry Authentication
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jfrog-docker-secret
+  namespace: ${NAME_SPACE}
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: ${JFROG_TOKEN} # Replace with your base64-encoded JFROG/Docker credentials
+---
+
+---
+# Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${NAME_SPACE}
+  namespace: ${NAME_SPACE}
+  labels:
+    app: ${APP_NAME}
+spec:
+  replicas: ${REPLICA}
+  selector:
+    matchLabels:
+      app: ${APP_NAME}
+  template:
+    metadata:
+      labels:
+        app: ${APP_NAME}
+    spec:
+      containers:
+      - name: ${APP_NAME}
+        image: ${IMAGE_NAME}
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5000
+      imagePullSecrets:
+      - name: jfrog-docker-secret
+---
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${APP_NAME}
+  namespace: ${NAME_SPACE}
+spec:
+  selector:
+    app: ${APP_NAME}
+  ports:
+  - protocol: TCP
+    port: 5000
+    targetPort: 5000
+  type: ClusterIP
+---
+# Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ${APP_NAME}
+  namespace: ${NAME_SPACE}
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: public # Ensure this matches your ingress class
+  rules:
+   - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ${APP_NAME}
+            port:
+              number: 5000

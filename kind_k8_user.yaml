@@ -1,0 +1,44 @@
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${NAME_SPACE}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${APP_NAME}
+  namespace: ${NAME_SPACE}
+spec:
+  replicas: ${REPLICA}
+  selector:
+    matchLabels:
+      app: ${APP_NAME}
+  template:
+    metadata:
+      labels:
+        app: ${APP_NAME}
+    spec:
+      hostNetwork: false           # Bind to the host's network stack
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+      - name: ${APP_NAME}
+        image: ${IMAGE_NAME}
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 5000     # Application port
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${APP_NAME}
+  namespace:  ${NAME_SPACE}
+spec:
+  selector:
+    app: ${APP_NAME}
+  type: NodePort
+  ports:
+    - protocol: TCP
+      port: 5000           # Application port
+      targetPort: 5000     # Container port
+      nodePort: ${EXT_NODE_PORT}     # Host port (within range 30000-32767 for NodePort by default)

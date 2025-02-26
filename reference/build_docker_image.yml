@@ -1,0 +1,38 @@
+.build_docker_image:
+ script: 
+  #
+  # setup the environment (.env) file for the database access 
+  #
+  - echo "MONGO_HOST_1 = $MONGO_HOST_1" > .env
+  - echo "MONGO_HOST_2 = $MONGO_HOST_2" >> .env
+  - echo "MONGO_PORT_1 = $MONGO_PORT_1" >> .env
+  - echo "MONGO_PORT_2 = $MONGO_PORT_2" >> .env  
+  # 
+  - echo "MONGO_ADMIN_DB_USER = $MONGO_ADMIN_DB_USER " >> .env
+  - echo "MONGO_ADMIN_DB_PASS = $MONGO_ADMIN_DB_PASS" >> .env
+  #
+  - echo "MONGO_DB_NAME = $TEMP_MONGO_DB_NAME" >> .env
+  #
+  - echo "MONGO_APP_DB_USER = $TEMP_MONGO_APP_DB_USER" >> .env
+  - echo "MONGO_APP_DB_PASS = $TEMP_MONGO_APP_DB_PASS" >> .env
+  # 
+  - echo "APP_VERSION = $TEMP_APP_VERSION" >> .env 
+  # 
+  - echo "APP_RELEASE_DATE = $CI_PIPELINE_CREATED_AT" >> .env
+  - cat .env # uncomment for troubleshooting purpose only  
+  #
+  - echo  "$CI_JFROG_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_JFROG_REGISTRY_USER" --password-stdin
+  #
+  - echo ".build_docker_image-001, Building image with tag $IMAGE_TAG"
+  - docker build -t "$IMAGE_TAG" .
+  - docker images  # List images to confirm build succeeded
+  #
+  - echo ".build_docker_image-002, pushing to jfrog container registry $IMAGE_TAG"
+  - docker push "$IMAGE_TAG"  # Push the image to the JFrog registry
+  #
+  # let's remove the python3 mongodb environment file 
+  # 
+  - echo ".build_docker_image-003, rm .env"
+  - ls -l .env 
+  - rm .env
+  - ls -l  # confirm the file has been removed

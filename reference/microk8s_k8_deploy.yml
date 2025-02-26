@@ -1,0 +1,63 @@
+.microk8s_k8_deploy:
+ script:
+  # 
+  - echo " +++" > temp_kind_setting.tx
+  - echo "NAME_SPACE ==> $NAME_SPACE" >> temp_kind_setting.txt
+  - echo "KIND_CLUSTER_NAME ==> $KIND_CLUSTER_NAME" >> temp_kind_setting.txt
+  - echo "APP_NAME ==> $APP_NAME" >> temp_kind_setting.txt
+  - echo "IMAGE_NAME ==> $IMAGE_NAME" >> temp_kind_setting.txt
+  - echo "REPLICA ==> $REPLICA"  >> temp_kind_setting.txt
+  - echo "IMAGE_NAME ==> $IMAGE_NAME" >> temp_kind_setting.txt
+  - echo "JFROG_TOKEN ==> $JFROG_TOKEN" >> temp_kind_setting.txt
+  - echo "SHORT_IMAGE_NAME ==> $SHORT_IMAGE_NAME">> temp_kind_setting.txt
+  - echo " +++" >> temp_kind_setting.txt
+  - cat temp_kind_setting.txt
+  - rm temp_kind_setting.txt  
+  #
+  - envsubst < microk8s_k8_user.yaml > temp_microk8s_k8_user.yaml
+  #
+  - cat temp_microk8s_k8_user.yaml
+  # 
+  # Delete the old namespace 
+  - if microk8s kubectl get namespace "$NAME_SPACE" --no-headers --ignore-not-found | grep -q "$NAME_SPACE"; then
+  -      echo ".MICROK8S_K8_DEPLOY-001, K8 namespace with the name $NAME_SPACE is present"
+  -      echo ".MICROK8S_K8_DEPLOY-002, Deleting namespace $NAME_SPACE, microk8s kubectl delete -f temp_microk8s_k8_user.yaml"
+  -      microk8s kubectl delete -f temp_microk8s_k8_user.yaml
+  #
+  # Found an issue with microk8s and JFROG for the container image, being a caching issue
+  # To be on the safe side, need to delete the image first
+  -      microk8s ctr images ls -q 
+  -      if [ -n "$(microk8s ctr images ls -q | grep -i "$IMAGE_NAME")" ]; then
+  -         echo ".MICROK8S_K8_DEPLOY-003, Removing image ==> $IMAGE_NAME"
+  -         microk8s ctr images rm "$IMAGE_NAME"
+  -         SHA_IMAGE_REMOVE=$(microk8s ctr images ls -q | grep -i "$SHORT_IMAGE_NAME" | grep -i sha256)
+  -         echo ".MICROK8S_K8_DEPLOY-004, Removing image, SHA_IMAGE REMOVE ==> $SHA_IMAGE_REMOVE"
+  -         microk8s ctr images rm "$SHA_IMAGE_REMOVE"
+  -         microk8s ctr images ls -q
+  -      fi
+  -      echo ".MICROK8S_K8_DEPLOY-005, Applying new namespace configuration";
+  -      microk8s kubectl apply -f temp_microk8s_k8_user.yaml;
+  - else
+  -      echo ".MICROK8S_K8_DEPLOY-006, K8 namespace $NAME_SPACE not present, creating it";
+  -      microk8s kubectl apply -f temp_microk8s_k8_user.yaml;
+  - fi
+  #
+  - sleep 10 
+  #
+  - echo ".MICROK8S_K8_DEPLOY-007, let go see the PODS stuff "
+  - microk8s kubectl get pods -A -o wide
+
+  - echo ".MICROK8S_K8_DEPLOY-008, let go see the deployments stuff "
+  - microk8s kubectl get deployments -A -o wide
+
+  - echo ".MICROK8S_K8_DEPLOY-009, let go see the service stuff "
+  - microk8s kubectl get svc -A -o wide
+
+  - echo ".MICROK8S_K8_DEPLOY-010, let go see the ingress stuff "
+  - microk8s kubectl get ingress -A -o wide
+
+  - echo ".MICROK8S_K8_DEPLOY-011, let go see the ep stuff "
+  - microk8s kubectl get ep -A -o wide 
+  
+  - echo ".MICROK8S_K8_DEPLOY-012, let go see the node stuff "
+  - microk8s kubectl get node -A -o wide 

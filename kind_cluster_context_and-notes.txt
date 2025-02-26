@@ -1,0 +1,31 @@
+
+kind get kubeconfig --name test1 > kubeconfig-test1.yaml ; export KUBECONFIG=kubeconfig-test1.yaml
+
+kind get kubeconfig --name test2 > kubeconfig-test2.yaml ; export KUBECONFIG=kubeconfig-test2.yaml
+
+kind get kubeconfig --name test3 > kubeconfig-test3.yaml ; export KUBECONFIG=kubeconfig-test3.yaml
+
+kind get kubeconfig --name test4 > kubeconfig-test4.yaml ; export KUBECONFIG=kubeconfig-test4.yaml
+
+#
+# Keep in mind that both the staging and movie K8 namespace share the same Kind Kubernetes cluster, 
+# in this case being the staging Kind kubernetes cluster 
+#
+
+kind get kubeconfig --name staging > kubeconfig-staging.yaml; export KUBECONFIG=kubeconfig-staging.yaml
+
+#
+kubectl config get-contexts
+#
+kubectl exec -it <pod name>> -n <name space> -- bash
+#
+#
+# to logon into a specific pod 
+
+Example:
+
+kubectl get pod -n test3
+
+# once you know the pod name 
+
+kubectl exec -it movie-deployment-<XXXXXXXX> -n test3 -- bash

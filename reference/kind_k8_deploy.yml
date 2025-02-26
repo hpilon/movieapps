@@ -1,0 +1,57 @@
+.kind_k8_deploy:
+ script:
+  #
+  - echo " +++" > temp_kind_setting.tx
+  - echo "NAME_SPACE ==> $NAME_SPACE" >> temp_kind_setting.txt
+  - echo "KIND_CLUSTER_NAME ==> $KIND_CLUSTER_NAME" >> temp_kind_setting.txt
+  - echo "APP_NAME ==> $APP_NAME" >> temp_kind_setting.txt
+  - echo "IMAGE_NAME ==> $IMAGE_NAME" >> temp_kind_setting.txt
+  - echo "EXT_NODE_PORT ==> $EXT_NODE_PORT" >> temp_kind_setting.txt
+  - echo "DOCKER_IMAGE_TAG_TO_PULL ==> $DOCKER_IMAGE_TAG_TO_PULL"  >> temp_kind_setting.txt
+  - echo "IMAGE_NAME ==> $IMAGE_NAME" >> temp_kind_setting.txt
+  - echo "TEMP_NUMBER_OF_K8_WORKERS ==> $TEMP_NUMBER_OF_K8_WORKERS" >> temp_kind_setting.txt
+  - echo " +++" >> temp_kind_setting.txt
+  - cat temp_kind_setting.txt
+  - rm temp_kind_setting.txt
+  #
+  # generating the require kind kubernetes (k8) cluster configuration file 
+  - chmod +x ./kind_k8_config.sh
+  #                      "cluster_name" "K8 port" "number of worker(s)"  "additional port" "additional port"  
+  # $1 = $KIND_CLUSTER_NAME
+  # $2 = $EXT_NODE_PORT
+  # $3 = $TEMP_NUMBER_OF_K8_WORKER, to a maximum of 3 
+  # $4 = $ADDITIONAL_PORT_1, in this for pre-production K8 namespace  
+  # $5 = $ADDITIONAL_PORT_2 for future use 
+  #
+  - ./kind_k8_config.sh  $KIND_CLUSTER_NAME  $EXT_NODE_PORT $TEMP_NUMBER_OF_K8_WORKERS $ADDITIONAL_PORT_1 $ADDITIONAL_PORT_2
+  - cat kind_k8_config.yaml
+  #
+  #
+  - echo ".kind_k8_deploy-001, deleting and re-creating KIND K8 ==> $KIND_CLUSTER_NAME, if required"
+  - docker ps | grep -i "$KIND_CLUSTER_NAME" && /usr/local/bin/kind delete cluster --name "$KIND_CLUSTER_NAME"
+  - docker ps | grep -i "$KIND_CLUSTER_NAME" || /usr/local/bin/kind create cluster --config=kind_k8_config.yaml
+  #
+  - echo ".kind_k8_deploy-002, ==> DOCKER_IMAGE_TAG_TO_PULL ==> $DOCKER_IMAGE_TAG_TO_PULL"
+  #
+  - echo  "$CI_JFROG_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_JFROG_REGISTRY_USER" --password-stdin
+  #
+  - echo ".kind_k8_deploy-003, docker pull $DOCKER_IMAGE_TAG_TO_PULL"
+  - docker pull "$DOCKER_IMAGE_TAG_TO_PULL" 
+  - echo ".kind_k8_deploy-004, docker tag $DOCKER_IMAGE_TAG_TO_PULL $IMAGE_NAME"
+  - docker tag "$DOCKER_IMAGE_TAG_TO_PULL" "$IMAGE_NAME"  
+  - docker images    
+  # load the docker image to kind kubernetes
+  - echo ".kind_k8_deploy-005, local $IMAGE_NAME to cluster kind K8 $KIND_CLUSTER_NAME"
+  - /usr/local/bin/kind load docker-image "$IMAGE_NAME" -n "$KIND_CLUSTER_NAME"
+  #
+  - envsubst < kind_k8_user.yaml  > temp_user.yaml
+  #
+  - cat temp_user.yaml
+  #
+  - /snap/bin/kubectl apply -f temp_user.yaml
+  # 
+  - /snap/bin/kubectl get componentstatuses
+  - /snap/bin/kubectl config get-contexts
+  - sleep 30
+  - /snap/bin/kubectl get all -o wide -n "$KIND_CLUSTER_NAME"
+#  

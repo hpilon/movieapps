@@ -1,0 +1,35 @@
+.mongo_db_action:
+ script:
+  # setup the environment (.env) file for the database creation 
+  - echo ".mongo_db_action:-001, ==> generating the required mongodb .env file"
+  #
+  - echo "MONGO_HOST_1 = $MONGO_HOST_1" > .env
+  - echo "MONGO_HOST_2 = $MONGO_HOST_2" >> .env
+  - echo "MONGO_PORT_1 = $MONGO_PORT_1" >> .env
+  - echo "MONGO_PORT_2 = $MONGO_PORT_2 " >> .env  
+  - echo "MONGO_ADMIN_DB_USER = $MONGO_ADMIN_DB_USER " >> .env
+  - echo "MONGO_ADMIN_DB_PASS = $MONGO_ADMIN_DB_PASS" >> .env
+  - echo "MONGO_DB_NAME = $TEMP_MONGO_DB_NAME" >> .env
+  - echo "MONGO_APP_DB_USER = $TEMP_MONGO_APP_DB_USER" >> .env
+  - echo "MONGO_APP_DB_PASS = $TEMP_MONGO_APP_DB_PASS" >> .env
+  - echo "APP_VERSION = $CI_COMMIT_REF_NAME" >> .env 
+  - echo "APP_RELEASE_DATE = $CI_PIPELINE_CREATED_AT" >> .env
+  # - cat .env  # uncomment for troubleshooting only
+  #
+  # before we re-create the database , let's clean things up 
+  #
+  - echo ".mongo_db_action-002, ==> executing python3 delete_user_db.py"  
+  - python3 delete_user_db.py
+  #         
+  # Ok, let re-recreate the database, temporary for testing, 
+  # given in staging we should not being doing this
+  #
+  - echo ".mongo_db_action:-003, ==> executing create_db_collection.py"   
+  - python3 create_db_collection.py
+  #
+  # let's remove the python3 mogondb environment file 
+  # 
+  - echo ".mongo_db_action-004, ==> rm .env" 
+  - ls -l .env 
+  - rm .env
+  #

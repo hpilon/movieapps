@@ -1,0 +1,1337 @@
+# +++
+# Release BETA v 1.0 
+# +++
+#
+# This specific GitLab pipeline control script
+# is not fully optimized yet
+#
+# General concept:
+#
+# The “test1” account/user is the main account allowed to run the 
+# staging pipeline automatically (under the staging branch) 
+# and promote the solution to production (under the main branch).
+#
+# Each accounts has their own space to test their application based 
+# on specific branch before the code can be promoted to staging and 
+# production. This was mostly done because of the 
+# limited kubernetes resources within my home LAB.
+#
+# As an example, user “test3” does all the code changes under 
+# the “dev_test3” branch after a fork of “test1” “main” branch, 
+# and from the GitLab pipeline configuration file (.gitlab-ci.yml) 
+# you will notice the pipeline script 
+# invoking different staging actions. 
+#
+# Once user “test3” satisfied with their code change, they would request 
+# a merge to “test1” staging branch. Afterwards user “test1” 
+# would approve the merge of the staging automatically triggering the staging aspect. 
+#
+# User “test3” can review how their apps/code looks like by visiting 
+# the GitLab operate/environments … review/test3 Open TAB (one the 
+# right).
+# 
+# If everything looks good, user “test1” would merge the staging branch 
+# to the main branch and manually trigger the GitLab pipeline. 
+#
+# Important Notes:
+#
+# Note 1:
+#
+# Because we are utilizing nginx reverse proxy in from the kind kubernetes 
+# and using the GitLab local account gitlab-runner 
+# normally with limited privilege I had to add sudo privilege 
+# to the local account gitlab-runner to manipulate 
+# the nginx reverse proxy configuration file
+#
+# Realizing this could of been address in a different way, I opted to do it this
+# way for now, will optimized this approach at some future release
+#
+# using "visudo", below is example of what I included 
+##
+## need to add some privilege to the gitab-runner account on this system
+## to manipulate nginx reverse proxy configure file
+## In support of the kind kubernetes and microk8s kubernetes systems 
+##
+## gitlab-runner ALL=(ALL) NOPASSWD: ALL
+#
+# Note 2:
+#
+# The same is required for the microk8s system for the gitlab-runner account as outlined in "Note 1" 
+#
+# Note 3: 
+#
+# Using GitLab !reference capabilities as a function, 
+# implying this GitLab pipeline script is the main controlling pipeline script 
+#
+# Note 3:
+# Because I'm using kind kubernetes on ubuntu 22.02 & 24.04 , there is know issues with this error 
+# Pod errors due to “too many open files”
+# This may be caused by running out of inotify resources. 
+# Resource limits are defined by fs.inotify.max_user_watches 
+# and fs.inotify.max_user_instances system variables. 
+# For example, in Ubuntu these default to 8192 and 128 respectively, which is not enough to create a cluster with many nodes.
+#
+# To increase these limits temporarily run the following commands on the host:
+#
+# sudo sysctl fs.inotify.max_user_watches=524288
+# sudo sysctl fs.inotify.max_user_instances=512
+#
+# To make the changes persistent, edit the file /etc/sysctl.conf and add these lines:
+# 
+# fs.inotify.max_user_watches = 524288
+# fs.inotify.max_user_instances = 512
+#
+# Note 4:
+# 
+# Because I'm using "self signed" cert with JFROG Container registry, I need to allow any of the systems
+# local docker registry to trust the self-signed cert by adding this option  
+# 
+## cat /etc/docker/daemon.json
+##{
+##  "insecure-registries": ["jfrog.havefun.test"]
+##}
+#
+# and restart docker service 
+#
+# This will allow to pull any docker images or source code from JFROG 
+#
+stages:
+#
+- certify python code and mongodb initial creation 
+#
+- security sast scan # Static Application Security Testing (SAST)
+- security secret scan # Detects hardcoded secrets in code
+#
+- build docker image
+- security container scan # Scans Docker images for CVEs
+- deploy kind kubectl
+- automated testing
+#
+# within the staging branch, and within staging gitlab environment for user / account "test1" only 
+- deploy kind kubectl staging
+- staging automated testing
+#
+# within the main branch, and within production gitlab environment for user / account "test1" only 
+- deploy production
+- production automated testing
+
+variables:
+#
+# Global variables
+#
+# Using the GitLab internal variable $GITLAB_USER_NAME for a logical test as we needs to reflect 
+# the value is PRIMARY_REPO_OWNER as the user /account owner of this GitLab repo.
+#
+# All the global variable names must all be entered in "upper case" for the overall logic to work within this main GitLab pipeline script 
+  SOLUTION_VERSION: "BETA 1.0"
+  PRIMARY_REPO_OWNER: "test1" # user /account owner of this GitLab repo
+#
+# The implication is that this account/user is the only one allowed to move this application / solution in the staging (staging branch) 
+# and production (main branch) phases. 
+#
+# using JFROG CONTAINER REGISTRY CE (open source version) to maintain different docker images and source code
+#
+# All the global variable names  must all be entered in "upper case" for the overall logic to work within this main GitLab pipeline script 
+  CI_REGISTRY: "jfrog.pilon.org"
+#  CI_REGISTRY: "jfrog.havefun.test" # replace withe your JFROF instance, if  being used   
+  CI_FROG_CONTAINER_NAME: "movieportalmongodb"
+  CI_FROG_CONTAINER_IMAGE: "movie"
+#
+# Using Kind kubernetes to simulate multiple virtual environments for testing, staging and pre-production and
+# because of resource limitations within my home lab, I need to define specific variables as static for now.
+#
+# All the global variable names  must all be entered in "upper case" for the overall logic to work within this main GitLab pipeline script 
+  KIND_K8_URL_DOMAIN: ".kind.havefun.test"
+#
+# As outlined above, this is my attempt to create a local private kubernetes cloud by leveraging GitLab CE using mostly Kind K8 and Microk8s   
+#  Because og limited resources within my home LAB, I'm controlling the user /accounts in  scope for this project.
+# being :
+#       user /account "test1" being the owner to the GitLab repo and application 
+#       user / account "test2" being a developer contributing to the project 
+#       user / account "test3" being a developer contributing to the project 
+#       user / account "test4" being a developer contributing to the project 
+#
+# Because we are utilizing kubernetes "nodePort:" in this solution version for testing purpose, we are reserving this K8 port for user "test1".
+# All the global variable names  must all be entered in "upper case" for the overall logic to work within this main GitLab pipeline script  
+  TEST1_EXT_K8_NODE_PORT: "30100" # reserving 30101,30102 and 30103 for future use 
+  TEST1_REFRESH_MONGODB: "YES" # valid values are YES or NO, YES implies deleting and re-creating mongodb
+  TEST1_REBUILD_DOCKER: "YES" # valid values are YES or NO, YES implies re-creating the application docker image
+  TEST1_MONGO_DB_NAME: "test1_movie_db" # test 1 isolated mongodb database name
+  TEST1_NGINX_REVERSE_PROXY_SERVER: "test1.kind.havefun.test" # required when configuring the nginx reverse proxy option  
+  TEST1_NUMBER_OF_KIND_WORKERS: "1" # the number of "Kind" K8 worker(s) within the namespace / cluster 
+  TEST1_NUMBER_OF_KIND_REPLICA: "2" # the number of K8 pods within the name space and "Kind" K8 cluster
+#
+# Because we are utilizing kubernetes "nodePort:" for testing purpose, we are reserving this K8 port for user "test2".
+# All the global variable names  must all be entered in "upper case" for the overall logic to work within this main GitLab pipeline script 
+  TEST2_EXT_K8_NODE_PORT: "30200" # reserving 30201,30202 and 30203 for future use 
+  TEST2_REFRESH_MONGODB: "YES" # valid values are YES or NO, YES implies deleting and re-creating mongodb
+  TEST2_REBUILD_DOCKER: "YES" # valid values are YES or NO, YES implies re-creating the application docker image
+  TEST2_MONGO_DB_NAME: "test2_movie_db" # test 2 isolated mongodb database name
+  TEST2_NGINX_REVERSE_PROXY_SERVER: "test2.kind.havefun.test"  # required when configuring the nginx reverse proxy option
+  TEST2_NUMBER_OF_KIND_WORKERS: "0" # the number of "Kind" K8 worker(s) within the namespace / cluster 
+  TEST2_NUMBER_OF_KIND_REPLICA: "2" # the number of K8 pods within the name space and "Kind" K8 cluster      
+#
+# Because we are utilizing kubernetes "nodePort:" for testing purpose, we are reserving this K8 port for user "test3".
+# All the global variable names  must all be entered in "upper case" for the overall logic to work within this main GitLab pipeline script  
+  TEST3_EXT_K8_NODE_PORT: "30300" # reserving 30301,30302 and 30303 for future use 
+  TEST3_REFRESH_MONGODB: "YES" # valid values are YES or NO, YES implies deleting and re-creating mongodb
+  TEST3_REBUILD_DOCKER: "YES" # valid values are YES or NO, YES implies re-creating the application docker image
+  TEST3_MONGO_DB_NAME: "test3_movie_db" # test 3 isolated mongodb database name
+  TEST3_NGINX_REVERSE_PROXY_SERVER: "test3.kind.havefun.test"  # required when configuring the nginx reverse proxy option
+  TEST3_NUMBER_OF_KIND_WORKERS: "0" # the number of "Kind" K8 worker(s) within the namespace / cluster  
+  TEST3_NUMBER_OF_KIND_REPLICA: "2" # the number of K8 pods within the name space and "Kind" K8 cluster   
+#
+# Because we are utilizing kubernetes "nodePort:" for testing purpose, we are reserving this K8 port for user "test4".
+# All the global variable names  must all be entered in "upper case" for the overall logic to work within this main GitLab pipeline script   
+  TEST4_EXT_K8_NODE_PORT: "30400" # reserving 30301,30302 and 30303 for future use 
+  TEST4_REFRESH_MONGODB: "YES" # valid values are YES or NO, YES implies deleting and re-creating mongodb
+  TEST4_REBUILD_DOCKER: "YES" # valid values are YES or NO, YES implies re-creating the application docker image
+  TEST4_MONGO_DB_NAME: "test4_movie_db" # test 3 isolated mongodb database name
+  TEST4_NGINX_REVERSE_PROXY_SERVER: "test4.kind.havefun.test"  # required when configuring the nginx reverse proxy option 
+  TEST4_NUMBER_OF_KIND_WORKERS: "1" # the number of "Kind" K8 worker(s) within the namespace / cluster  
+  TEST4_NUMBER_OF_KIND_REPLICA: "2" # the number of K8 pods within the name space and "Kind" K8 cluster    
+#
+# Because of limited resources with my home LAB, I needed to split different 
+# virtual environments on different systems using GitLab runners (agent).
+#
+# System kind27.havefun.test/192.168.1.27 is a ubuntu 22.04 VMware VM with docker and Kind k8 installed 
+# GitLab runner using TAG (runner-as-service-27-shell-only) and using the shell interface
+# All the global variable names  must all be entered in "upper case" for the overall logic to work within this main GitLab pipeline script 
+  KIND_K8_SYSTEM_RUN_ON_27: "runner-as-service-27-shell-only" # system (kind27.havefun.test/192.168.1.27)
+  KIND27_DNS_NAME: "kind27.havefun.test" # required when configuring the nginx reverse proxy option 
+ #
+# System kind28.havefun.test/192.168.1.28 is a ubuntu 24.04 VMware VM with docker and kind k8 installed 
+# GitLab runner using TAG (runner-as-service-28-shell-only) using shell interface 
+# All the global variable names  must all be entered in "upper case" for the overall logic to work within this main GitLab pipeline script 
+  KIND_K8_SYSTEM_RUN_ON_28: "runner-as-service-28-shell-only" # system (kind28.havefun.test/192.168.1.28) 
+  KIND28_DNS_NAME: "kind28.havefun.test" # required when configuring the nginx reverse proxy option 
+#
+# System ubunt31.havefun.test/192.168.1.31 is a ubuntu 22.04 VMware VM with docker and kind k8 installed 
+# GitLab runner using TAG (runner-as-service-31-shell-only) using shell interface
+# All the global variable names  must all be entered in "upper case" for the overall logic to work within this main GitLab pipeline script 
+  KIND_K8_SYSTEM_RUN_ON_31: "runner-as-service-31-shell-only" # system (ubunt31.havefun.test/192.168.1.31) 
+  KIND31_DNS_NAME: "ubuntu31.havefun.test" # required when configuring the nginx reverse proxy option
+#
+# System prod1.havefun.test/192.168.1.26 is a ubuntu 22.04 VMware VM with docker and kind k8 installed 
+# GitLab runner using TAG (runner-as-service-26-shell-only) using shell interface is executed on
+# All the global variable names  must all be entered in "upper case" for the overall logic to work within this main GitLab pipeline script 
+  KIND_K8_SYSTEM_RUN_ON_26: "runner-as-service-26-shell-only" # system (prod1.havefun.test/192.168.1.26) 
+  KIND26_DNS_NAME: "prod1.havefun.test"  # required when configuring the nginx reverse proxy option 
+#
+#  Staging 
+#
+# All the global variable names  must all be entered in "upper case" for the overall logic to work within this main GitLab pipeline script 
+  STAGING_URL_TESTING: "http://staging.kind.havefun.test"
+  STAGING_URL: "http://staging.kind.havefun.test"
+  STAGING_NGINX_REVERSE_PROXY_SERVER: "staging.kind.havefun.test"
+  STAGING_EXT_K8_NODE_PORT: "30800" # reserving 30801,30802 and 30803 for future use
+  STAGING_REBUILD_DOCKER: "YES" # valid values are YES or NO, YES implies re-creating the application docker image 
+  STAGING_MONGO_DB_NAME: "staging_movie_db" # staging isolated mongodb database name
+  STAGING_NUMBER_OF_KIND_WORKERS: "1" # the number of "Kind" K8 worker(s) within the namespace / cluster  
+  STAGING_NUMBER_OF_KIND_REPLICA: "2" # the number of K8 pods within the name space and "Kind" K8 cluster      
+#
+# Temporary using Kind kubernetes for pre-production , will migrate to Microk8s at a future date
+# All the global variable names  must all be entered in "upper case" for the overall logic to work within this main GitLab pipeline script 
+  PRE_PRODUCTION_URL_TESTING: "http://movie-preprod.havefun.test"
+  PRE_PRODUCTION_URL: "http://movie-preprod.havefun.test"
+  PRE_PRODUCTION_NGINX_REVERSE_PROXY_SERVER: "movie-preprod.havefun.test"
+  PRE_PRODUCTION_EXT_K8_NODE_PORT: "30900" # reserving 30901,30902 and 30903 for future use
+  PRODUCTION_REBUILD_DOCKER: "YES" # valid values are YES or NO, YES implies re-creating the application docker image
+  PRODUCTION_MONGO_DB_NAME: "movie_db" # pre-production and production share the same isolated mongodb database name 
+  PRODUCTION_NUMBER_OF_KIND_WORKERS: "2" # the number of "Kind" K8 worker(s) within the namespace / cluster  
+  PRODUCTION_NUMBER_OF_KIND_REPLICA: "2" # the number of K8 pods within the name space and "Kind" K8 cluster   
+
+# Using Microk8s
+# All the global variable names  must all be entered in "upper case" for the overall logic to work within this main GitLab pipeline script 
+  PRODUCTION_URL_TESTING: "http://movie-prod.havefun.test"
+  PRODUCTION_URL: "http://movie-prod.havefun.test"
+#
+# GitLab runner using TAG (runner-as-service-24-shell-only) using shell interface 
+# and the main system where the Docker images are built from scratch
+# All the global variable names  must all be entered in "upper case" for the overall logic to work within this main GitLab pipeline script 
+  DOCKER_COMPILE_SYSTEM: "runner-as-service-24-shell-only" # system (jfrog.havefun.test/192.168.1.24)
+#
+# Primary system with all the appropriate libraries 
+# to execute a couple python script to manipulate 
+# delete and created mongodb database and collection  
+# GitLab runner using TAG (runner-as-service-27-shell-only) using shell interface
+# All the global variable names  must all be entered in "upper case" for the overall logic to work within this main GitLab pipeline script 
+  MONGODB_SYSTEM_CREATE_DELETE: "runner-as-service-27-shell-only" # system (kind27.havefun.test/192.168.1.27) 
+#
+#  Main mongodb connectivity information for the main mongodb instance 
+#  Since this solution is using a container based "shard" mongodb configuration 
+#  with 2 redundant mongodb shard routers.
+#
+#  Review the create_mongodb_container_v4.sh bash script to better understand my above comments.
+#
+#  The python app needs to know how to connect to the mongodb instance
+# All the global variable names  must all be entered in "upper case" for the overall logic to work within this main GitLab pipeline script   
+  MONGO_HOST_1: "sql104.havefun.test" 
+  MONGO_HOST_2: "sql104.havefun.test"
+  MONGO_PORT_1: "27117"
+  MONGO_PORT_2: "27118"
+  #
+  # Username and Password have moved in the GitLab variables secure area for this project 
+  # review the "OPTIONAL-curl-command.sh" script file (using curl commands) to create the below in a bulk load process 
+  #
+  # The script "OPTIONAL-curl-command.sh" better defines all the required variables in play for each users / accounts
+  #
+  # CI_JFROG_REGISTRY_USER:
+  # CI_JFROG_REGISTRY_PASSWORD:
+  #
+  # MONGO_ADMIN_DB_USER: 
+  # MONGO_ADMIN_DB_PASS: 
+  #
+  # TEST1_MONGO_APP_DB_USER: 
+  # TEST1_MONGO_APP_DB_PASS: 
+  #
+  # TEST2_MONGO_APP_DB_USER: 
+  # TEST2_MONGO_APP_DB_PASS: 
+  #
+  # TEST3_MONGO_APP_DB_USER: 
+  # TEST3_MONGO_APP_DB_PASS:  
+  #
+  # TEST4_MONGO_APP_DB_USER: 
+  # TEST4_MONGO_APP_DB_PASS: 
+  #   
+  # STAGING_MONGO_APP_DB_USER: 
+  # STAGING_MONGO_APP_DB_PASS: 
+  #
+  # PRODUCTION_MONGO_APP_DB_USER: 
+  # PRODUCTION_MONGO_APP_DB_PASS: 
+  #
+  # PRODUCTION_MICROK8S_JFROG_TOKEN: 
+  #
+  # including all the external functions 
+  #
+include:
+  - local: 'reference/print_gitlab_internal_variables.yml'  
+  - local: 'reference/mongo_db_action.yml'
+  - local: 'reference/build_docker_image.yml'
+  - local: 'reference/kind_k8_deploy.yml'
+  - local: 'reference/config_nginx.yml'
+  - local: 'reference/clean_local_docker_registry.yml'
+  - local: 'reference/microk8s_k8_deploy.yml'
+  - local: 'reference/kind_k8_namespace_deployment.yml'
+
+LINT_TEST:  
+  #
+  # A lint test (or simply "linting") is a process of analyzing code for potential errors, 
+  # style issues, and deviations from coding standards, without actually executing the code. 
+  # The term originates from tools used to identify programming issues in C, 
+  # but it has since been adapted for many programming languages.
+  #
+  # flake8 is a Python tool for checking code quality and enforcing coding standards. 
+  # It acts as a linting and style guide enforcement tool, combining the functionality of several tools into one.
+  #
+  image: python:3.8.0-slim
+  stage: certify python code and mongodb initial creation 
+  environment:
+    name: review/$CI_COMMIT_REF_NAME  
+  before_script:
+    - pip install flake8-html
+    #
+    #     !reference is like a function or sub-routine
+    - !reference [.print_gitlab_internal_variables,script] # invoking  external pipeline file print_gitlab_internal_variables.yml
+  script:
+    - flake8 --format=html --htmldir=flake_reports/
+  artifacts:
+    when: always
+    paths:
+      - flake_reports/
+  rules:
+    # There is no need to check  the code during  the staging and production phases
+    # given the python code has been certified during this development phase  
+    # within the branch name with a string containing  "dev" and "feature" values. 
+    - if: $CI_COMMIT_BRANCH =~ /^(?i)(dev|feature)/ && $CI_COMMIT_BRANCH !~ /^(?i)(main|staging)$/
+      when: always  
+    - when: never  # Fallback rule to ensure no other branches trigger the job        
+
+MONGODB_REFRESH:
+   #
+   # GitLab pipeline stage to re-create the mongodb database, if required
+   #
+   # This is to support individual virtual test environments for these users / accounts (tes1|test2|test3|test4) only
+   # mostly because of limited resources within my home lab 
+   # and only applicable for branches name with a string containing "dev" or "feature" values.  
+   # 
+  image: python:3.8.0-slim
+  stage: certify python code and mongodb initial creation 
+  before_script: 
+    #
+    # Let's go create the test database 
+    # This should be move to a container by itself but for now , we wil do it this way 
+    # hence why all the additional software required 
+    - pip3 --version
+    - pip3 install load_dotenv
+    - pip3 install pymongo
+    - python3 --version
+    #
+    # the "!reference" syntax is like a function or sub-routine  
+    - !reference [.print_gitlab_internal_variables, script] # invoking  external pipeline file print_gitlab_internal_variables.yml
+    #    
+    - echo "** current user $GITLAB_USER_NAME off branch $CI_COMMIT_BRANCH **" > temp_variables_file.txt
+    - export DEVELOPER_USER="${GITLAB_USER_NAME^^}" # Convert the current username to uppercase
+
+    - export VAR_NAME="${DEVELOPER_USER}_REFRESH_MONGODB"
+    - export CHECK_REFRESH_MONGODB="${!VAR_NAME}" # Get the global variable value
+    - echo "DEVELOPER_USER ==> $DEVELOPER_USER" >> temp_variables_file.txt
+    - echo "CHECK_REFRESH_MONGODB ==> $CHECK_REFRESH_MONGODB" >> temp_variables_file.txt
+
+    - export VAR_NAME="${DEVELOPER_USER}_MONGO_DB_NAME"
+    - export TEMP_MONGO_DB_NAME="${!VAR_NAME}" # Get the global variable value
+    - echo "TEMP_MONGO_DB_NAME ==> $TEMP_MONGO_DB_NAME" >> temp_variables_file.txt
+
+    - export VAR_NAME="${DEVELOPER_USER}_MONGO_APP_DB_USER"
+    - export TEMP_MONGO_APP_DB_USER="${!VAR_NAME}" # Get the global variable value
+    - echo "TEMP_MONGO_APP_DB_USER ==> $TEMP_MONGO_APP_DB_USER" >> temp_variables_file.txt
+
+    - export VAR_NAME="${DEVELOPER_USER}_MONGO_APP_DB_PASS"
+    - export TEMP_MONGO_APP_DB_PASS="${!VAR_NAME}" # Get the global variable value
+    - echo "TEMP_MONGO_APP_DB_PASS ==> $TEMP_MONGO_APP_DB_PASS" >> temp_variables_file.txt
+    - cat temp_variables_file.txt
+    - rm temp_variables_file.txt
+  script:
+    #
+    -  if [ "$CHECK_REFRESH_MONGODB" == "YES" ]; then
+    -     echo "MONGODB_REFRESH set to $CHECK_REFRESH_MONGODB for user $GITLAB_USER_NAME on branch $CI_COMMIT_BRANCH"
+    -     !reference [.mongo_db_action, script] # Invoke external pipeline file
+    -  fi  
+  tags:
+    - "$MONGODB_SYSTEM_CREATE_DELETE"
+  rules:
+    # Because of my home lab system resource limitations, 
+    # I need to control the users (test1, test2, test3 and test4)
+    # allowed to be part of the GitLab pipeline logic 
+    # for creating mongodb database and collection
+    # within the branch name with a string containing  "dev" or "feature" values.  
+    - if: $CI_COMMIT_BRANCH =~ /^(?i)(dev|feature)/ && $GITLAB_USER_NAME =~ /^(?i)(test1|test2|test3|test4)$/
+      when: on_success  
+    - when: never  # Fallback rule to ensure no other branches trigger the job  
+
+PY_TEST:
+  #
+  # Pytest (or PY_TEST) is a powerful, flexible, and easy-to-use testing framework for Python. 
+  # It is designed to write simple unit tests and complex functional tests with 
+  # minimal boilerplate code. Pytest provides automatic test discovery, detailed assertions, 
+  # fixtures for setup/teardown, and extensive plugin support, making it a preferred choice 
+  # for testing Python applications.
+  #
+  #  Automated Testing
+  # 
+  # Runs unit tests, functional tests, and integration tests in Python.
+  # Simple Test Discovery
+  #
+  # Finds test files automatically (files starting with test_ or ending in _test.py).
+  # Finds test functions automatically (functions starting with test_).
+  # Powerful Assertions
+  # 
+  # Uses Python's assert statements for easy-to-read test conditions.
+  # Fixtures & Dependency Injection
+  # 
+  # Provides reusable test setup and cleanup with @pytest.fixture.
+  # Parallel Testing (with pytest-xdist)
+  # 
+  # Runs multiple tests at once to speed up execution.
+  # Detailed Test Reports
+  #
+  # Shows clear failure messages and stack traces.
+  # Generates HTML reports (with pytest-html).
+  #
+  image: python:3.8.0-slim
+  stage: certify python code and mongodb initial creation 
+  before_script:
+   #
+   # !reference is like a function or sub-routine  
+   - !reference [.print_gitlab_internal_variables, script] # invoking  external pipeline file print_gitlab_internal_variables.yml
+
+   - pip install load_dotenv
+   - pip install pytest-html
+   - pip install -r requirements.txt
+   #
+   - echo "** current user $GITLAB_USER_NAME off branch $CI_COMMIT_BRANCH **" > temp_variables_file.txt
+   - export DEVELOPER_USER="${GITLAB_USER_NAME^^}" # Convert the current username to uppercase
+
+   - export VAR_NAME="${DEVELOPER_USER}_REFRESH_MONGODB"
+   - export CHECK_REFRESH_MONGODB="${!VAR_NAME}" # Get the global variable value
+   - echo "DEVELOPER_USER ==> $DEVELOPER_USER" >> temp_variables_file.txt
+   - echo "CHECK_REFRESH_MONGODB ==> $CHECK_REFRESH_MONGODB" >> temp_variables_file.txt
+
+   - export VAR_NAME="${DEVELOPER_USER}_MONGO_DB_NAME"
+   - export TEMP_MONGO_DB_NAME="${!VAR_NAME}" # Get the global variable value
+   - echo "TEMP_MONGO_DB_NAME ==> $TEMP_MONGO_DB_NAME" >> temp_variables_file.txt
+
+   - export VAR_NAME="${DEVELOPER_USER}_MONGO_APP_DB_USER"
+   - export TEMP_MONGO_APP_DB_USER="${!VAR_NAME}" # Get the global variable value
+   - echo "TEMP_MONGO_APP_DB_USER ==> $TEMP_MONGO_APP_DB_USER" >> temp_variables_file.txt
+
+   - export VAR_NAME="${DEVELOPER_USER}_MONGO_APP_DB_PASS"
+   - export TEMP_MONGO_APP_DB_PASS="${!VAR_NAME}" # Get the global variable value
+   - echo "TEMP_MONGO_APP_DB_PASS ==> $TEMP_MONGO_APP_DB_PASS" >> temp_variables_file.txt
+   - cat temp_variables_file.txt
+   - rm temp_variables_file.txt
+   
+   -    echo "PYTEST, PYTEST against user $GITLAB_USER_NAME on branch $CI_COMMIT_BRANCH"       
+   
+   -    echo "MONGO_HOST_1 = $MONGO_HOST_1" > .env
+   -    echo "MONGO_HOST_2 = $MONGO_HOST_2" >> .env
+   -    echo "MONGO_PORT_1 = $MONGO_PORT_1" >> .env
+   -    echo "MONGO_PORT_2 = $MONGO_PORT_2 " >> .env  
+   -    echo "MONGO_ADMIN_DB_USER = $MONGO_ADMIN_DB_USER " >> .env
+   -    echo "MONGO_ADMIN_DB_PASS = $MONGO_ADMIN_DB_PASS" >> .env
+   #
+   -    echo "MONGO_DB_NAME = $TEMP_MONGO_DB_NAME" >> .env
+   -    echo "MONGO_APP_DB_USER = $TEMP_MONGO_APP_DB_USER" >> .env
+   -    echo "MONGO_APP_DB_PASS = $TEMP_MONGO_APP_DB_PASS" >> .env
+   #
+   -    echo "APP_VERSION = $CI_COMMIT_REF_NAME" >> .env 
+   -    echo "APP_RELEASE_DATE = $CI_PIPELINE_CREATED_AT" >> .env
+   -    cat .env  # uncomment for troubleshooting purpose only 
+   #    
+  script:
+   - pytest -s --html=pytest_reports/pytest-report.html --self-contained-html
+  after_script:
+   #
+   # let's remove the python3 mogondb environment file 
+   # 
+   - echo "ACTION ==> rm .env" 
+   - ls -l .env 
+   - rm .env
+   - ls -l  # comnfirm the file has been removed
+  artifacts:
+    when: always
+    paths:
+    - pytest_reports/
+  needs:
+    - LINT_TEST
+    - MONGODB_REFRESH
+  rules:
+    # There is no need to check  the code during the staging and production stages 
+    # given the python code has been certified during this phase / stage 
+    # within the branch name with a string containing "dev" or "feature" values.
+    - if: $CI_COMMIT_BRANCH =~ /^(?i)(dev|feature)/ && $CI_COMMIT_BRANCH !~ /^(?i)(main|staging)$/
+      when: always  
+    - when: never  # Fallback rule to ensure no other branches trigger the job        
+
+# Static Code Analysis (SAST) using Semgrep
+SEMGREP:
+#
+# Static Application Security Testing (SAST) finds known vulnerabilities 
+# in your application source code. SAST runs in your CI/CD pipeline and performs analysis without requiring compilation.
+#
+# SAST:
+#
+# - Detects vulnerabilities across multiple programming languages and frameworks.
+# - Identifies security issues early in the development lifecycle.
+# - Generates reports with detailed vulnerability information.
+# - Integrates vulnerability findings into merge request workflows.
+# - Supports custom ruleset configuration to control scanning behavior.
+#
+# Semgrep is an open-source static analysis tool that scans source code for patterns related to security vulnerabilities, 
+# bugs, or coding style issues. It allows you to write custom rules (using a simple YAML syntax) to search for specific 
+# patterns in your code, making it flexible for enforcing coding standards or identifying potential issues. 
+# Semgrep supports multiple programming languages and is designed to be fast and easily 
+# integrated into your CI/CD pipeline for continuous code analysis.
+#
+  image: returntocorp/semgrep
+  stage: security sast scan
+  before_script: 
+    #
+    # the "!reference" syntax is like a function or sub-routine  
+     - !reference [.print_gitlab_internal_variables, script] # invoking  external pipeline file print_gitlab_internal_variables.yml
+    #  
+    # Define the SAST private rule, these are very basic rules, will  need to augment those rules as we progress with this project 
+     - cat semgrep-config.yml
+  script:
+    # 
+    # instead of download from the internet all the time, let's just use the local copy if the container 
+    # loaded in the private JFROG container registry instead 
+    - echo  "$CI_JFROG_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_JFROG_REGISTRY_USER" --password-stdin
+    - docker run --rm -v "$(pwd):/src" -w /src jfrog.havefun.test/security-tools/semgrep:latest semgrep --config=semgrep-config.yml --metrics=off --json > semgrep-report.json || true
+    # else the next syntax will use the public internet version  
+    # - docker run --rm -v "$(pwd):/src" -w /src returntocorp/semgrep semgrep --config=semgrep-config.yml --metrics=off --json > semgrep-report.json || true
+    #
+    - if [ -f "semgrep-report.json" ] ; then 
+    -      echo "SEMGREP-001, found the file semgrep-report.json"
+    # 
+    -      echo "SEMGREP-002, exposing the content of semgrep-report.json"    
+    -    cat semgrep-report.json | jq .
+    - else
+    -    echo "SEMGREP-003, file gitleaks-report.json NOT found" 
+    - fi    
+  artifacts:
+    paths:
+      - semgrep-report.json
+  tags:
+    - "$DOCKER_COMPILE_SYSTEM" # because of my home lab resource limitation, I'm limiting this stage on this system only        
+  rules:
+    # Because of my home lab system resource limitations, I need to control the users (test1, test2, test3 and test4)
+    # allowed to be part of the GitLab pipeline logic mostly because of the kind and microk8s kubernetes virtual environment  
+    # referenced when creation the K8 namespace for these users within the branch name 
+    # with a string containing  "dev", "feature" values.  
+    - if: $CI_COMMIT_BRANCH =~ /^(?i)(dev|feature)/ && $GITLAB_USER_NAME =~ /^(?i)(test1|test2|test3|test4)$/
+      when: always   
+
+# Secret Scanning using Gitleaks
+GITLEAKS:
+#
+# Gitleaks is an open-source tool designed to scan Git repositories for hardcoded secrets such as API keys, 
+# tokens, and credentials. It works by searching through your repository’s commit history and 
+# current files to identify patterns that may indicate sensitive information has been accidentally included in the code. 
+#
+  image: zricethezav/gitleaks
+  stage: security secret scan
+  before_script: 
+    #
+    # the "!reference" syntax is like a function or sub-routine  
+     - !reference [.print_gitlab_internal_variables, script] # invoking  external pipeline file print_gitlab_internal_variables.yml
+    #
+  script:
+  # 
+  # --rm: Automatically removes the container when it exits.
+  # -v "$(pwd):/src": Mounts your current directory into the container at /src so Gitleaks can scan your code.
+  # zricethezav/gitleaks:latest detect: Executes the detect command within the container.
+  #  --source=/src: Tells Gitleaks to scan the mounted source directory.
+  # --report-path=/src/gitleaks-report.json: Saves the report in your current directory.
+  # 
+  # instead of download from the internet all the time, let's just use the local copy if the container 
+  # loaded in the private JFROG container registry instead 
+    - echo  "$CI_JFROG_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_JFROG_REGISTRY_USER" --password-stdin  
+  #  
+    - docker run --rm -v "$(pwd):/src" jfrog.havefun.test/security-tools/gitleaks:latest detect --source=/src --report-path=/src/gitleaks-report.json --platform=gitlab || true
+  # else the next syntax will use the public internet version 
+  #  - docker run --rm -v "$(pwd):/src" zricethezav/gitleaks:latest detect --source=/src --report-path=/src/gitleaks-report.json --platform=gitlab || true
+  #
+    - if [ -f "gitleaks-report.json" ] ; then 
+    -    echo "GITLEAKS-001, found the file gitleaks-report.json"
+    # 
+    -    echo "GITLEAKS-002, exposing the content of gitleaks-report.json"
+    -    cat gitleaks-report.json
+    #
+    # GITLEAKS has a problem with OPTIONAL-curl-command.sh
+    # not 100% sure why,  but I wanted to expose the content of the file to represent the syntax of the potential issue 
+    # -    cat -n OPTIONAL-curl-command.sh # uncomment if you want to see more  
+    #
+    - else
+    -    echo "GITLEAKS-003, file gitleaks-report.json NOT found" 
+    - fi
+  artifacts:
+    paths:
+    - gitleaks-report.json
+  tags:
+    - "$DOCKER_COMPILE_SYSTEM" # because of my home lab resource limitation, I'm limiting this stage on this system only     
+  rules:
+    # Because of my home lab system resource limitations, I need to control the users (test1, test2, test3 and test4)
+    # allowed to be part of the GitLab pipeline logic mostly because of the kind and microk8s kubernetes virtual environment  
+    # referenced when creation the K8 namespace for these users within the branch name 
+    # within the branch name with a string containing "dev" or "feature" values. 
+    - if: $CI_COMMIT_BRANCH =~ /^(?i)(dev|feature)/ && $GITLAB_USER_NAME =~ /^(?i)(test1|test2|test3|test4)$/
+      when: always   
+
+BUILD_DOCKERS_NON_PRODUCTION:
+  image: docker:latest
+  services:
+    - docker:dind
+  stage: build docker image
+  before_script:
+    #
+    # !reference is like a function or sub-routine  
+    - !reference [.print_gitlab_internal_variables, script]  # invoking  external pipeline file print_gitlab_internal_variables.yml
+    #
+    - echo "** current user $GITLAB_USER_NAME off branch $CI_COMMIT_BRANCH **" > temp_variables_file.txt
+    - export DEVELOPER_USER="${GITLAB_USER_NAME^^}" # Convert the current username to uppercase
+
+    - export VAR_NAME="${DEVELOPER_USER}_REBUILD_DOCKER"
+    - export CHECK_REBUILD_DOCKER="${!VAR_NAME}" # Get the global variable value
+    - echo "DEVELOPER_USER ==> $DEVELOPER_USER" >> temp_variables_file.txt
+    - echo "CHECK_REFRESH_MONGODB ==> $CHECK_REBUILD_DOCKER" >> temp_variables_file.txt
+
+    - export VAR_NAME="${DEVELOPER_USER}_MONGO_DB_NAME"
+    - export TEMP_MONGO_DB_NAME="${!VAR_NAME}" # Get the global variable value
+    - echo "TEMP_MONGO_DB_NAME ==> $TEMP_MONGO_DB_NAME" >> temp_variables_file.txt
+
+    - export VAR_NAME="${DEVELOPER_USER}_MONGO_APP_DB_USER"
+    - export TEMP_MONGO_APP_DB_USER="${!VAR_NAME}" # Get the global variable value
+    - echo "TEMP_MONGO_APP_DB_USER ==> $TEMP_MONGO_APP_DB_USER" >> temp_variables_file.txt
+
+    - export VAR_NAME="${DEVELOPER_USER}_MONGO_APP_DB_PASS"
+    - export TEMP_MONGO_APP_DB_PASS="${!VAR_NAME}" # Get the global variable value
+    - echo "TEMP_MONGO_APP_DB_PASS ==> $TEMP_MONGO_APP_DB_PASS" >> temp_variables_file.txt
+    #
+    # +++
+    # Important to note when this GitLab pipeline script execute, the staging check below will overwrite the
+    # values defined above 
+    # 
+    #- cat temp_variables_file.txt # uncomment for troubleshooting
+    - rm temp_variables_file.txt    
+  script:
+    #
+    # Do we need to clean the local system docker registry, default is now , unless we are rebuilding th docker image again 
+    -  export NEED_TO_CLEAN_DOCKER_REGISTRY="N"
+    # Just making sure there is no "staging" or "main" text in the branch name, accidently  
+    -  if [ "$CI_COMMIT_BRANCH" != "staging" ]  && [ "$CI_COMMIT_BRANCH" != "main" ] ; then
+    -     if [ "$CHECK_REBUILD_DOCKER" == "YES" ]; then
+    -        echo "BUILD_DOCKERS-001, BUILD_DOCKER block, user $DEVELOPER_USER on branch $CI_COMMIT_BRANCH"
+ 
+    -        export TEMP_APP_VERSION="$CI_COMMIT_BRANCH/$DEVELOPER_USER" 
+    -        echo "TEMP_APP_VERSION ==> $TEMP_APP_VERSION"
+
+    -        export CI_FROG_CONTAINER_IMAGE_VERSION="$CI_COMMIT_BRANCH-$DEVELOPER_USER"
+    -        echo "CI_FROG_CONTAINER_IMAGE_VERSION ==> $CI_FROG_CONTAINER_IMAGE_VERSION"
+
+    -        export IMAGE_TAG="$CI_REGISTRY/$CI_FROG_CONTAINER_NAME/$CI_FROG_CONTAINER_IMAGE:$CI_FROG_CONTAINER_IMAGE_VERSION"  
+    -        echo "IMAGE_TAG ===> $IMAGE_TAG" 
+  
+    #        !reference is like a function or sub-routine      
+    -        !reference [.build_docker_image, script] # invoking  external pipeline file build_docker_image.yml
+    -        NEED_TO_CLEAN_DOCKER_REGISTRY="Y"
+    -      fi 
+    -  fi 
+    # 
+    # The "staging phase" should be limited to the user test1 (upper case TEST1 user ) only based on that user approval of merging the staging branch 
+    # base on other developers contributing / merging to the branch staging.
+    #
+    - if [ "$DEVELOPER_USER" == "TEST1" ] && [ "$CI_COMMIT_BRANCH" == "staging" ]; then 
+    -     if [ "$CHECK_REBUILD_DOCKER" == "YES" ]; then
+    -        echo "BUILD_DOCKERS-002, BUILD_DOCKER block, user $DEVELOPER_USER on branch $CI_COMMIT_BRANCH"   
+    
+    -        export TEMP_APP_VERSION="STAGING" 
+    -        echo "TEMP_APP_VERSION ==> $TEMP_APP_VERSION"
+    -        export CI_FROG_CONTAINER_IMAGE_VERSION="staging"
+    -        echo "CI_FROG_CONTAINER_IMAGE_VERSION ==> $CI_FROG_CONTAINER_IMAGE_VERSION"
+    -        export IMAGE_TAG="$CI_REGISTRY/$CI_FROG_CONTAINER_NAME/$CI_FROG_CONTAINER_IMAGE:$CI_FROG_CONTAINER_IMAGE_VERSION"
+    -        echo "IMAGE_TAG ===> $IMAGE_TAG" 
+    # +++ 
+    # Overwriting these variables as we don't want to create a new mongodb database and credentials 
+    # for staging 
+    #
+    -        export TEMP_MONGO_DB_NAME="$STAGING_MONGO_DB_NAME" 
+    -        echo "TEMP_MONGO_DB_NAME ==> $TEMP_MONGO_DB_NAME"
+    -        export TEMP_MONGO_APP_DB_USER="$STAGING_MONGO_APP_DB_USER" 
+    -        echo "TEMP_MONGO_APP_DB_USER ==> $TEMP_MONGO_APP_DB_USER" 
+    -        export TEMP_MONGO_APP_DB_PASS="$STAGING_MONGO_APP_DB_PASS" 
+    -        echo "TEMP_MONGO_APP_DB_PASS ==> $TEMP_MONGO_APP_DB_PASS" >> temp_variables_file.txt
+    #
+    #       !reference is like a function or sub-routine      
+    -       !reference [.build_docker_image, script] # invoking  external pipeline file build_docker_image.yml
+    -        NEED_TO_CLEAN_DOCKER_REGISTRY="Y"  
+    -    fi
+    - fi 
+    #
+    - echo "Confirm if BUILD_DOCKER action required (Y/N), NEED_TO_CLEAN_DOCKER_REGISTRY ==> $NEED_TO_CLEAN_DOCKER_REGISTRY"
+    - if [ "$NEED_TO_CLEAN_DOCKER_REGISTRY" == "Y" ] ; then 
+    -      echo "BUILD_DOCKERS-003, Triggering the local system docker registry cleaning"
+    #      Because of limited resources, trying to keep things clean off the local system docker registry 
+    -      !reference [.clean_local_docker_registry, script]  # invoking  external pipeline file clean_local_docker_registry.yml 
+    - fi                
+  tags:
+    - "$DOCKER_COMPILE_SYSTEM" # because of my home lab resource limitation, I'm limiting this stage on this system only   
+  rules:
+    # Because of my home lab system resource limitations, I need to control the users (test1, test2, test3 and test4)
+    # allowed to be part of the GitLab pipeline logic mostly because of the kind and microk8s kubernetes virtual environment  
+    # referenced when creation the K8 namespace for these users within the branch name 
+    # with a string containing  "dev", "feature", "staging" or "main" values.  
+    - if: $CI_COMMIT_BRANCH =~ /^(?i)(dev|feature|staging)/ && $GITLAB_USER_NAME =~ /^(?i)(test1|test2|test3|test4)$/
+      when: on_success  
+    - when: never  # Fallback rule to ensure no other branches trigger the job  
+
+# Container Image Scanning using Grype
+GRYPE_SCAN:
+#
+# GRYPE_SCAN is a CI/CD job that automates the process of security scanning for container images (or filesystems) 
+#
+# Scans Container Images:
+# It examines the image (or filesystem) for known vulnerabilities in the operating system packages, language-specific libraries, and other components.
+#
+# Checks Against Vulnerability Databases:
+# Grype cross-references the components found in your image with public vulnerability databases to identify potential security issues.
+#
+# Generates Reports:
+# The scanner outputs its findings (usually in JSON format) detailing vulnerabilities along with metadata such as severity, package names, and remediation advice.
+#
+  image: anchore/grype
+  stage: security container scan
+  before_script: 
+    #
+    # the "!reference" syntax is like a function or sub-routine  
+     - !reference [.print_gitlab_internal_variables, script] # invoking  external pipeline file print_gitlab_internal_variables.yml
+    #  
+     - echo "** current user $GITLAB_USER_NAME off branch $CI_COMMIT_BRANCH **" > temp_variables_file.txt
+     - export DEVELOPER_USER="${GITLAB_USER_NAME^^}" # Convert the current username to uppercase
+
+     - export VAR_NAME="${DEVELOPER_USER}_REBUILD_DOCKER"
+     - export CHECK_REBUILD_DOCKER="${!VAR_NAME}" # Get the global variable value
+     - echo "DEVELOPER_USER ==> $DEVELOPER_USER" >> temp_variables_file.txt
+
+     - export CI_FROG_CONTAINER_IMAGE_VERSION="$CI_COMMIT_BRANCH-$DEVELOPER_USER"
+     - echo "CI_FROG_CONTAINER_IMAGE_VERSION ==> $CI_FROG_CONTAINER_IMAGE_VERSION" >> temp_variables_file.txt
+
+     - export DOCKER_IMAGE_TAG_TO_PULL="$CI_REGISTRY/$CI_FROG_CONTAINER_NAME/$CI_FROG_CONTAINER_IMAGE:$CI_FROG_CONTAINER_IMAGE_VERSION"   
+     - echo "DOCKER_IMAGE_TAG_TO_PULL ==> $DOCKER_IMAGE_TAG_TO_PULL" >> temp_variables_file.txt
+   
+     - cat temp_variables_file.txt # uncomment for troubleshooting
+     - rm temp_variables_file.txt 
+
+     - echo  "$CI_JFROG_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_JFROG_REGISTRY_USER" --password-stdin    
+     - docker pull "$DOCKER_IMAGE_TAG_TO_PULL" 
+
+     - docker tag "$DOCKER_IMAGE_TAG_TO_PULL" myimage:to-test
+
+     - docker images 
+     #
+  script:
+     # instead of download from the internet all the time, let's just use the local copy if the container 
+     # loaded in the private JFROG container registry instead 
+     - echo  "$CI_JFROG_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_JFROG_REGISTRY_USER" --password-stdin  
+     - docker run --rm -v "$(pwd):/src" -v /var/run/docker.sock:/var/run/docker.sock jfrog.havefun.test/security-tools/grype:latest myimage:to-test -o json > grype-report.json || true
+     # else ue the public internet version 
+     # - docker run --rm -v "$(pwd):/src" -v /var/run/docker.sock:/var/run/docker.sock anchore/grype myimage:to-test -o json > grype-report.json || true
+     #
+     - if [ -f "grype-report.json" ] ; then 
+     -    echo "GRYPE_SCAN-001, found the file grype-report.json"
+    # 
+     -    echo "GRYPE_SCAN-002, checking for error "
+     -    cat grype-report.json | jq 'if has("errors") then .errors else "No errors found" end'  
+     - else
+     -    echo "GRYPE_SCAN-003, file grype-report.json NOT found" 
+     - fi
+     #     
+     - echo "GRYPE_SCAN-004, Triggering the local system docker registry cleaning"
+     #  Because of limited resources, trying to keep things clean off the local system docker registry 
+     - !reference [.clean_local_docker_registry, script]  # invoking  external pipeline file clean_local_docker_registry.yml  
+  artifacts:
+    paths:
+      - grype-report.json
+  tags:
+    - "$DOCKER_COMPILE_SYSTEM" # because of my home lab resource limitation, I'm limiting this stage on this system only
+  needs:
+    - BUILD_DOCKERS_NON_PRODUCTION       
+  rules:
+    # Because of my home lab system resource limitations, I need to control the users (test1, test2, test3 and test4)
+    # allowed to be part of the GitLab pipeline logic mostly because of the kind and microk8s kubernetes virtual environment  
+    # referenced when creation the K8 namespace for these users within the branch name 
+    # within the branch name with a string containing "dev" or "feature" values.
+    - if: $CI_COMMIT_BRANCH =~ /^(?i)(dev|feature)/ && $GITLAB_USER_NAME =~ /^(?i)(test1|test2|test3|test4)$/
+      when: always   
+
+BUILD_DOCKERS_PRODUCTION:
+  image: docker:latest
+  services:
+    - docker:dind
+  stage: build docker image
+  before_script:
+    #
+    # !reference is like a function or sub-routine  
+    - !reference [.print_gitlab_internal_variables, script]  # invoking  external pipeline file print_gitlab_internal_variables.yml
+  script:
+    #
+    - echo "BUILD_DOCKERS_PRODUCTION-001, building the production docker image"
+    #
+    -        TEMP_MONGO_DB_NAME="$PRODUCTION_MONGO_DB_NAME"
+    -        TEMP_MONGO_APP_DB_USER="$PRODUCTION_MONGO_APP_DB_USER"
+    -        TEMP_MONGO_APP_DB_PASS="$PRODUCTION_MONGO_APP_DB_PASS"
+    -        TEMP_APP_VERSION="PRODUCTION" 
+    #
+    -        IMAGE_TAG_VERSION="latest"
+    -        IMAGE_TAG="$CI_REGISTRY/$CI_FROG_CONTAINER_NAME/$CI_FROG_CONTAINER_IMAGE:$IMAGE_TAG_VERSION"    
+    #
+    #        !reference is like a function or sub-routine      
+    -        !reference [.build_docker_image, script] # invoking  external pipeline file build_docker_image.yml
+    #
+    -        echo "BUILD_DOCKERS_PRODUCTION-001, Triggering the local system docker registry cleaning"
+    #        Because of limited resources, trying to keep things clean off the local system docker registry 
+    -        !reference [.clean_local_docker_registry, script]  # invoking  external pipeline file clean_local_docker_registry.yml      
+  tags:
+    - "$DOCKER_COMPILE_SYSTEM" # because of my home lab resource limitation, I'm limiting this stage on this system only  
+  rules:
+    # Only user / account "test1" allowed to promote the solution / project  to production 
+    # within the main branch. 
+    # and this a temporary stage because we are still using "Kind" K8 with nodePort for pre-production 
+    - if: $CI_COMMIT_BRANCH =~ /^(?i)main$/ && $GITLAB_USER_NAME =~ /^(?i)test1$/
+      when: manual # this stage needs to be triggered manually
+    - when: never  # Fallback rule to ensure no other branches trigger the job  
+
+
+DEPLOY_KIND_K8_ON_KIND27_SYSTEM:
+  variables:
+    ENV_URL_TO_EXPOSE: "http://$GITLAB_USER_NAME$KIND_K8_URL_DOMAIN"    
+  image: docker:latest
+  services:
+    - docker:dind
+  stage: deploy kind kubectl
+  environment:
+    name: review/$CI_COMMIT_REF_NAME
+    #
+    # To make the URL work, I had to install nginx  as a reverse proxy
+    # on system kind27
+    #
+    url: "$ENV_URL_TO_EXPOSE"
+  before_script:
+    #
+    # !reference is like a function or sub-routine  
+    - !reference [.print_gitlab_internal_variables, script]  # invoking  external pipeline file print_gitlab_internal_variables.yml
+    #
+    # Configure all the variables required for this phase 
+    - echo "** current user $GITLAB_USER_NAME off branch $CI_COMMIT_BRANCH **" > temp_variables_file.txt
+    - export DEVELOPER_USER="${GITLAB_USER_NAME^^}" # Convert the current username to uppercase
+    - echo "DEVELOPER_USER ==> $DEVELOPER_USER" >> temp_variables_file.txt
+    #
+    - export VAR_NAME="${DEVELOPER_USER}_EXT_K8_NODE_PORT"
+    - export EXT_NODE_PORT="${!VAR_NAME}" # Get the global variable value
+    - echo "EXT_NODE_PORT ==> $EXT_NODE_PORT" >> temp_variables_file.txt  
+    #
+    - export VAR_NAME="${DEVELOPER_USER}_NUMBER_OF_KIND_REPLICA"
+    - export REPLICA="${!VAR_NAME}" # Get the global variable value
+    - echo "REPLICA ==> $REPLICA" >> temp_variables_file.txt  
+    #
+    - export VAR_NAME="${DEVELOPER_USER}_NUMBER_OF_KIND_WORKERS"
+    - export TEMP_NUMBER_OF_K8_WORKERS="${!VAR_NAME}" # Get the global variable value
+    - echo "TEMP_NUMBER_OF_K8_WORKERS ==> $TEMP_NUMBER_OF_K8_WORKERS" >> temp_variables_file.txt  
+    #
+    - TEMP_NGINX_REV_PROXY_FILE="$GITLAB_USER_NAME-kind"
+    - echo "TEMP_NGINX_REV_PROXY_FILE==> $TEMP_NGINX_REV_PROXY_FILE" >> temp_variables_file.txt
+    #
+    - export NAME_SPACE="$GITLAB_USER_NAME"
+    - echo "NAME_SPACE ==> $NAME_SPACE" >> temp_variables_file.txt
+    #
+    - export KIND_CLUSTER_NAME="$GITLAB_USER_NAME"
+    - echo "KIND_CLUSTER_NAME==> $KIND_CLUSTER_NAME" >> temp_variables_file.txt
+    #
+    - export CI_FROG_CONTAINER_IMAGE_VERSION="$CI_COMMIT_BRANCH-$DEVELOPER_USER"
+    - echo "CI_FROG_CONTAINER_IMAGE_VERSION ==> $CI_FROG_CONTAINER_IMAGE_VERSION" >> temp_variables_file.txt
+    # 
+    - export IMAGE_TAG="$CI_REGISTRY/$CI_FROG_CONTAINER_NAME/$CI_FROG_CONTAINER_IMAGE:$CI_FROG_CONTAINER_IMAGE_VERSION"  
+    - echo "IMAGE_TAG ===> $IMAGE_TAG" >> temp_variables_file.txt
+    #
+    - export DOCKER_IMAGE_TAG_TO_PULL="$CI_REGISTRY/$CI_FROG_CONTAINER_NAME/$CI_FROG_CONTAINER_IMAGE:$CI_FROG_CONTAINER_IMAGE_VERSION"   
+    - echo "DOCKER_IMAGE_TAG_TO_PULL ==> $DOCKER_IMAGE_TAG_TO_PULL" >> temp_variables_file.txt
+    #
+    - export IMAGE_NAME="$CI_FROG_CONTAINER_IMAGE:$CI_FROG_CONTAINER_IMAGE_VERSION" 
+    - echo "IMAGE_NAME ==> $IMAGE_NAME" >> temp_variables_file.txt
+    #
+    - export APP_NAME="movie-deployment"
+    - echo "APP_NAME ==> $APP_NAME" >> temp_variables_file.txt
+    #
+    - export VAR_NAME="${DEVELOPER_USER}_NGINX_REVERSE_PROXY_SERVER"
+    - export TEMP_SERVER_REV_PROXY_NAME="${!VAR_NAME}" # Get the global variable value
+    - echo "TEMP_SERVER_REV_PROXY_NAME ==> $TEMP_SERVER_REV_PROXY_NAME " >> temp_variables_file.txt       
+    #
+    # ++
+    # This global variable value "KIND27_DNS_NAME" is key for this phase because we are executing 
+    # the gitlab-runner as a shell integration based on the value of this global variable "KIND_K8_SYSTEM_RUN_ON_27"
+    # in support of configuring the nginx reverse proxy capabilities
+    #
+    - export TEMP_PROXY_URL_SETTING="http://$KIND27_DNS_NAME:$EXT_NODE_PORT"
+    - echo "TEMP_PROXY_URL_SETTING ==> $TEMP_PROXY_URL_SETTING" >> temp_variables_file.txt
+    #
+    - cat temp_variables_file.txt # uncomment for troubleshooting
+    - rm temp_variables_file.txt
+  script:
+    # 
+    # Just making sure there is no "staging" or "main" text in the branch name, accidently  
+    - if [ "$CI_COMMIT_BRANCH" != "staging" ] && [ "$CI_COMMIT_BRANCH" != "main" ] ; then
+    #
+    -   echo "DEPLOY_KIND_K8_ON_KIND28_SYSTEM-001, kind kubernetes deployment for user $GITLAB_USER_NAME on branch $CI_COMMIT_BRANCH"  
+    #
+    #   !reference is like a function or sub-routine 
+    -   !reference [.kind_k8_deploy, script]  # invoking  external pipeline file kind_k8_deploy.yml
+    #
+    -    echo "DEPLOY_KIND_K8_ON_KIND28_SYSTEM-004, Triggering the local system docker registry cleaning"
+    #    Because of limited resources, trying to keep things clean off the local system docker registry 
+    -    !reference [.clean_local_docker_registry, script]  # invoking  external pipeline file clean_local_docker_registry.yml 
+    #
+    #   !reference is like a function or sub-routine   
+    -   !reference [.config_nginx, script]  # invoking  external pipeline file config_nginx.yml                 
+    - fi  
+    #             
+  needs:
+    - PY_TEST
+    - GRYPE_SCAN
+    - BUILD_DOCKERS_NON_PRODUCTION
+    - MONGODB_REFRESH
+  tags:
+    - "$KIND_K8_SYSTEM_RUN_ON_27" # system where the GitLab runner using shell is executed on
+  rules:
+    # Because of my home lab system resource limitations, I need to control the user(s) (test3)
+    # allowed to be part of the GitLab pipeline logic mostly because of the kind and microk8s kubernetes virtual environment 
+    # referenced when creation the K8 namespace for these users within the branch name with a string containing "dev" or "feature" values.  
+    - if: $CI_COMMIT_BRANCH =~ /^(?i)(dev|feature)/ && $GITLAB_USER_NAME =~ /^(?i)test3$/ 
+      when: on_success  
+    - when: never  # Fallback rule to ensure no other branches trigger the job  
+
+
+DEPLOY_KIND_K8_ON_KIND28_SYSTEM:
+  variables:
+    ENV_URL_TO_EXPOSE: "http://$GITLAB_USER_NAME$KIND_K8_URL_DOMAIN"
+  image: docker:latest
+  services:
+    - docker:dind
+  stage: deploy kind kubectl
+  environment:
+    name: review/$CI_COMMIT_REF_NAME
+    #
+    # To make the URL work, I had to install nginx  as a reverse proxy
+    # on system kind28    
+    #
+    url: "$ENV_URL_TO_EXPOSE"
+  before_script:
+    #
+    # !reference is like a function or sub-routine  
+    - !reference [.print_gitlab_internal_variables, script]  # invoking  external pipeline file print_gitlab_internal_variables.yml
+    #
+    # Configure all the variables required for this phase 
+    - echo "** current user $GITLAB_USER_NAME off branch $CI_COMMIT_BRANCH **" > temp_variables_file.txt
+    - export DEVELOPER_USER="${GITLAB_USER_NAME^^}" # Convert the current username to uppercase
+    - echo "DEVELOPER_USER ==> $DEVELOPER_USER" >> temp_variables_file.txt
+    #
+    - export VAR_NAME="${DEVELOPER_USER}_EXT_K8_NODE_PORT"
+    - export EXT_NODE_PORT="${!VAR_NAME}" # Get the global variable value
+    - echo "EXT_NODE_PORT ==> $EXT_NODE_PORT" >> temp_variables_file.txt  
+    #
+    - export VAR_NAME="${DEVELOPER_USER}_NUMBER_OF_KIND_REPLICA"
+    - export REPLICA="${!VAR_NAME}" # Get the global variable value
+    - echo "REPLICA ==> $REPLICA" >> temp_variables_file.txt  
+    #
+    - export VAR_NAME="${DEVELOPER_USER}_NUMBER_OF_KIND_WORKERS"
+    - export TEMP_NUMBER_OF_K8_WORKERS="${!VAR_NAME}" # Get the global variable value
+    - echo "TEMP_NUMBER_OF_K8_WORKERS ==> $TEMP_NUMBER_OF_K8_WORKERS" >> temp_variables_file.txt  
+    #
+    - TEMP_NGINX_REV_PROXY_FILE="$GITLAB_USER_NAME-kind"
+    - echo "TEMP_NGINX_REV_PROXY_FILE==> $TEMP_NGINX_REV_PROXY_FILE" >> temp_variables_file.txt
+    #
+    - export NAME_SPACE="$GITLAB_USER_NAME"
+    - echo "NAME_SPACE ==> $NAME_SPACE" >> temp_variables_file.txt
+    #
+    - export KIND_CLUSTER_NAME="$GITLAB_USER_NAME"
+    - echo "KIND_CLUSTER_NAME==> $KIND_CLUSTER_NAME" >> temp_variables_file.txt
+    #
+    - export CI_FROG_CONTAINER_IMAGE_VERSION="$CI_COMMIT_BRANCH-$DEVELOPER_USER"
+    - echo "CI_FROG_CONTAINER_IMAGE_VERSION ==> $CI_FROG_CONTAINER_IMAGE_VERSION" >> temp_variables_file.txt
+    # 
+    - export IMAGE_TAG="$CI_REGISTRY/$CI_FROG_CONTAINER_NAME/$CI_FROG_CONTAINER_IMAGE:$CI_FROG_CONTAINER_IMAGE_VERSION"  
+    - echo "IMAGE_TAG ===> $IMAGE_TAG" >> temp_variables_file.txt
+    #
+    - export DOCKER_IMAGE_TAG_TO_PULL="$CI_REGISTRY/$CI_FROG_CONTAINER_NAME/$CI_FROG_CONTAINER_IMAGE:$CI_FROG_CONTAINER_IMAGE_VERSION"   
+    - echo "DOCKER_IMAGE_TAG_TO_PULL ==> $DOCKER_IMAGE_TAG_TO_PULL" >> temp_variables_file.txt
+    #
+    - export IMAGE_NAME="$CI_FROG_CONTAINER_IMAGE:$CI_FROG_CONTAINER_IMAGE_VERSION" 
+    - echo "IMAGE_NAME ==> $IMAGE_NAME" >> temp_variables_file.txt
+    #
+    - export APP_NAME="movie-deployment"
+    - echo "APP_NAME ==> $APP_NAME" >> temp_variables_file.txt
+    #
+    - export VAR_NAME="${DEVELOPER_USER}_NGINX_REVERSE_PROXY_SERVER"
+    - export TEMP_SERVER_REV_PROXY_NAME="${!VAR_NAME}" # Get the global variable value
+    - echo "TEMP_SERVER_REV_PROXY_NAME ==> $TEMP_SERVER_REV_PROXY_NAME " >> temp_variables_file.txt       
+    #
+    # ++
+    # This global variable value "KIND28_DNS_NAME" is key for this phase because we are executing 
+    # the gitlab-runner as a shell integration based on the value of this global variable "KIND_K8_SYSTEM_RUN_ON_28"
+    # in support of configuring the nginx reverse proxy capabilities
+    # 
+    - export TEMP_PROXY_URL_SETTING="http://$KIND28_DNS_NAME:$EXT_NODE_PORT"
+    - echo "TEMP_PROXY_URL_SETTING ==> $TEMP_PROXY_URL_SETTING" >> temp_variables_file.txt
+    #
+    - cat temp_variables_file.txt # uncomment for troubleshooting
+    - rm temp_variables_file.txt
+  script:
+    # 
+    # Just making sure there is no "staging" or "main" text in the branch name, accidently  
+    - if [ "$CI_COMMIT_BRANCH" != "staging" ] && [ "$CI_COMMIT_BRANCH" != "main" ] ; then
+    #
+    -   echo "DEPLOY_KIND_K8_ON_KIND28_SYSTEM-001, kind kubernetes deployment for user $GITLAB_USER_NAME on branch $CI_COMMIT_BRANCH"  
+    #
+    #   !reference is like a function or sub-routine 
+    -   !reference [.kind_k8_deploy, script]  # invoking  external pipeline file kind_k8_deploy.yml
+    #
+    -    echo "DEPLOY_KIND_K8_ON_KIND28_SYSTEM-004, Triggering the local system docker registry cleaning"
+    #    Because of limited resources, trying to keep things clean off the local system docker registry 
+    -    !reference [.clean_local_docker_registry, script]  # invoking  external pipeline file clean_local_docker_registry.yml 
+    #
+    #   !reference is like a function or sub-routine   
+    -   !reference [.config_nginx, script]  # invoking  external pipeline file config_nginx.yml                 
+    - fi  
+    #               
+  needs:
+    - PY_TEST
+    - GRYPE_SCAN
+    - BUILD_DOCKERS_NON_PRODUCTION
+    - MONGODB_REFRESH
+  tags:
+    - "$KIND_K8_SYSTEM_RUN_ON_28" # system where the GitLab runner using shell is executed on
+  rules:  
+    # Because of my home lab system resource limitations, I need to control the users (test1, test2 and test4 )
+    # allowed to be part of the GitLab pipeline logic mostly because of the kind and microk8s kubernetes virtual environment 
+    # referenced when creation the K8 namespace for these users within the branch name with a string containing "dev" or "feature" values.  
+    - if: $CI_COMMIT_BRANCH =~ /^(?i)(dev|feature)/ && $GITLAB_USER_NAME =~ /^(?i)(test1|test2|test4)$/ 
+      when: on_success  
+    - when: never  # Fallback rule to ensure no other branches trigger the job  
+
+AUTOMATED_TESTING_BRANCH_DEV_TESTX:  
+  image: alpine
+  stage: automated testing
+  before_script:
+    - !reference [.print_gitlab_internal_variables, script] # invoking  external pipeline file print_gitlab_internal_variables.yml
+    #
+    - apk --no-cache add curl
+  script:
+    #
+    - echo "AUTOMATED_TESTING_BRANCH_DEV_TESTX-001, user $GITLAB_USER_NAME on branch $CI_COMMIT_BRANCH"
+    - export FULL_URL_TO_TEST="http://$GITLAB_USER_NAME$KIND_K8_URL_DOMAIN"
+    - echo "AUTOMATED_TESTING_BRANCH_DEV_TESTX-002, FULL_URL_TO_TEST ==> $FULL_URL_TO_TEST"
+    #
+    - curl "$FULL_URL_TO_TEST" | grep -i "Movie"
+  #needs:
+  #  - DEPLOY_KIND_K8_ON_KIND27_SYSTEM
+  #  - DEPLOY_KIND_K8_ON_KIND28_SYSTEM            
+  rules:  
+    # Because of my home lab system resource limitations, I need to control the users (test1, test2, test3 and test4)
+    # allowed to be part of the GitLab pipeline logic mostly because of the kind and microk8s kubernetes virtual environment 
+    # referenced when creation the K8 namespace for these users within the branch name with a string containing "dev" or "feature" values.  
+    - if: $CI_COMMIT_BRANCH =~ /^(?i)(dev|feature)/ && $GITLAB_USER_NAME =~ /^(?i)(test1|test2|test3|test4)$/  
+      when: on_success  
+    - when: never  # Fallback rule to ensure no other branches trigger the job  
+
+#
+# +++
+# ---------------- Staging and Production section & stages --------------
+#
+# staging and production within the main branch section is more static 
+# +++
+#
+DEPLOY_STAGING_BRANCH:  
+  # 
+  image: docker:latest
+  services:
+    - docker:dind
+  stage: deploy kind kubectl staging
+  environment:
+    name: staging
+    url: "$STAGING_URL"
+  before_script:
+    - !reference [.print_gitlab_internal_variables, script] 
+  script:
+    #
+    -   echo "DEPLOY_STAGING_BRANCH-001, kind kubernetes deployment for user $GITLAB_USER_NAME on branch $CI_COMMIT_BRANCH"  
+    #
+    # Needed to export the variables mostly because of the way I populate the yaml file for the Kind kubernetes 
+    # in the kind_k8_deploy.yml external gitlab pipeline file 
+    #  
+    -   export NAME_SPACE="staging"
+    -   export KIND_CLUSTER_NAME="staging"
+    -   export APP_NAME="movie-deployment"
+    #
+    -   export CI_FROG_CONTAINER_IMAGE_VERSION="staging"
+    -   export DOCKER_IMAGE_TAG_TO_PULL="$CI_REGISTRY/$CI_FROG_CONTAINER_NAME/$CI_FROG_CONTAINER_IMAGE:$CI_FROG_CONTAINER_IMAGE_VERSION"   
+    -   export IMAGE_NAME="$CI_FROG_CONTAINER_IMAGE:$CI_FROG_CONTAINER_IMAGE_VERSION"
+    #
+    -   export EXT_NODE_PORT="$STAGING_EXT_K8_NODE_PORT"
+    -   export ADDITIONAL_PORT_1="$PRE_PRODUCTION_EXT_K8_NODE_PORT" # including this port fro the pre-production aspect
+    #
+    -   export REPLICA="$STAGING_NUMBER_OF_KIND_REPLICA" 
+    -   export TEMP_NUMBER_OF_K8_WORKERS="$STAGING_NUMBER_OF_KIND_WORKERS"        
+    #
+    #   !reference is like a function or sub-routine 
+    -   !reference [.kind_k8_deploy, script]  # invoking  external pipeline file kind_k8_deploy.yml
+    #
+    -   export TEMP_NGINX_REV_PROXY_FILE="staging-kind"
+    -   export TEMP_SERVER_REV_PROXY_NAME="$STAGING_NGINX_REVERSE_PROXY_SERVER"
+    # ++
+    # This global variable value "KIND27_DNS_NAME" is key for this phase because we are executing 
+    # the gitlab-runner as a shell integration based on the value of this global variable "KIND_K8_SYSTEM_RUN_ON_27"
+    #
+    # in support of configuring the nginx reverse proxy capabilities
+    -   export TEMP_PROXY_URL_SETTING="http://$KIND27_DNS_NAME:$EXT_NODE_PORT"
+    #
+    #   !reference is like a function or sub-routine   
+    -   !reference [.config_nginx, script]  # invoking  external pipeline file config_nginx.yml 
+    # 
+    #   Because of limited resources, trying to keep things clean off the local system docker registry 
+    -  !reference [.clean_local_docker_registry, script]  # invoking  external pipeline file clean_local_docker_registry.yml          
+  needs:
+    - BUILD_DOCKERS_NON_PRODUCTION
+  tags:
+    - "$KIND_K8_SYSTEM_RUN_ON_27" # system where the GitLab runner using shell is executed on
+  rules:
+      # within the branch name with a string of "staging" and value of $PRIMARY_REPO_OWNER 
+    - if: $CI_COMMIT_BRANCH =~ /^(?i)(staging)$/ && $GITLAB_USER_NAME == $PRIMARY_REPO_OWNER  
+      when: on_success  # Ensures the job runs for the "main" branch if the user is the repository owner
+    - when: never  # Fallback rule to ensure no other branches trigger the job  
+
+DEPLOY_KIND_PRE-PRODUCTION:  
+  image: docker:latest
+  services:
+    - docker:dind
+  stage: deploy production
+  environment:
+    name: pre-production
+    #
+    # To make the URL work, I had to install nginx  as a reverse proxy
+    # on system ubuntu31  
+    #    
+    url: "$PRE_PRODUCTION_URL"
+  before_script:
+    - !reference [.print_gitlab_internal_variables, script] 
+  script:
+    #
+    -   echo "DEPLOY_KIND_PRE-PRODUCTION-001, kind kubernetes deployment for user $GITLAB_USER_NAME on branch $CI_COMMIT_BRANCH"  
+    #
+    # Needed to export the variables mostly because of the way I populate the yaml file for the Kind kubernetes 
+    # in the kind_k8_namespace_deployment.yml external gitlab pipeline file 
+    #  
+    -   export NAME_SPACE="movie"
+    #
+    #   pre-production K8 namesapce will be shared off the staging kind kubernetes cluster 
+    -   export KIND_CLUSTER_NAME="staging"
+    #
+    -   export APP_NAME="movie-deployment"
+    #
+    -   export CI_FROG_CONTAINER_IMAGE_VERSION="latest"
+    -   export DOCKER_IMAGE_TAG_TO_PULL="$CI_REGISTRY/$CI_FROG_CONTAINER_NAME/$CI_FROG_CONTAINER_IMAGE:$CI_FROG_CONTAINER_IMAGE_VERSION"   
+    -   export IMAGE_NAME="$CI_FROG_CONTAINER_IMAGE:$CI_FROG_CONTAINER_IMAGE_VERSION"
+    #
+    -   export EXT_NODE_PORT="$PRE_PRODUCTION_EXT_K8_NODE_PORT"
+    -   export REPLICA="$PRODUCTION_NUMBER_OF_KIND_REPLICA" 
+    -   export TEMP_NUMBER_OF_K8_WORKERS="$PRODUCTION_NUMBER_OF_KIND_WORKERS"          
+    #
+    #   !reference is like a function or sub-routine 
+    -   !reference [.kind_k8_namespace_deployment, script]  # invoking  external pipeline file kind_k8_namespace_deployment.yml
+    #
+    -   export TEMP_NGINX_REV_PROXY_FILE="movie-kind"
+    -   export TEMP_SERVER_REV_PROXY_NAME="$PRE_PRODUCTION_NGINX_REVERSE_PROXY_SERVER"
+    # ++
+    # This global variable value "KIND31_DNS_NAME" is key for this phase because we are executing 
+    # the gitlab-runner as a shell integration based on the value of this global variable "KIND_K8_SYSTEM_RUN_ON_31"
+    #
+    -   export TEMP_PROXY_URL_SETTING="http://$KIND27_DNS_NAME:$EXT_NODE_PORT"
+    #   !reference is like a function or sub-routine   
+    -   !reference [.config_nginx, script]  # invoking  external pipeline file config_nginx.yml 
+    #
+    #    Because of limited resources, trying to keep things clean off the local system docker registry 
+    -   !reference [.clean_local_docker_registry, script]  # invoking  external pipeline file clean_local_docker_registry.yml         
+  needs:
+    - BUILD_DOCKERS_PRODUCTION
+  tags:
+    - "$KIND_K8_SYSTEM_RUN_ON_27" # system where the GitLab runner using shell is executed on
+  rules:
+    # within the branch name with a string of and "main" and value of $PRIMARY_REPO_OWNER 
+   - if: $CI_COMMIT_BRANCH =~ /^(?i)(main)$/ && $GITLAB_USER_NAME == $PRIMARY_REPO_OWNER      
+     when: on_success 
+   - when: never  # Fallback rule to ensure no other branches trigger the job  
+
+DEPLOY_MICROK8S_PRODUCTION:  
+  image: docker:latest
+  services:
+    - docker:dind
+  stage: deploy production
+  environment:
+    name: production
+    url: "$PRODUCTION_URL"
+  before_script:
+    - !reference [.print_gitlab_internal_variables, script] 
+  script:
+    #
+    -   echo "DEPLOY_MICROK8S_PRODUCTION-001, kind kubernetes deployment for user $GITLAB_USER_NAME on branch $CI_COMMIT_BRANCH"  
+    #
+    # Needed to export the variables mostly because of the way I populate the yaml file for the kind kubernetes 
+    # in the kind_k8_deploy.yml external gitlab pipeline file 
+    #
+    -   export NAME_SPACE="movie"
+    -   export KIND_CLUSTER_NAME="movie"
+    -   export APP_NAME="movie-deployment"
+    #
+    -   export CI_FROG_CONTAINER_IMAGE_VERSION="latest"
+    -   export SHORT_IMAGE_NAME="$CI_REGISTRY/$CI_FROG_CONTAINER_NAME/$CI_FROG_CONTAINER_IMAGE"   
+    -   export IMAGE_NAME="$CI_REGISTRY/$CI_FROG_CONTAINER_NAME/$CI_FROG_CONTAINER_IMAGE:$CI_FROG_CONTAINER_IMAGE_VERSION"
+    #
+    -   export REPLICA="$PRODUCTION_NUMBER_OF_KIND_REPLICA" 
+    -   export JFROG_TOKEN="$PRODUCTION_MICROK8S_JFROG_TOKEN" 
+    #
+    #   !reference is like a function or sub-routine 
+    -   !reference [.microk8s_k8_deploy, script]  # invoking  external pipeline file microk8s_k8_deploy.yml
+  needs:
+    - BUILD_DOCKERS_PRODUCTION
+  tags:
+    - "$KIND_K8_SYSTEM_RUN_ON_26"
+  rules:
+    # within the branch name with a string of and "main" and value of $PRIMARY_REPO_OWNER 
+   - if: $CI_COMMIT_BRANCH =~ /^(?i)(main)$/ && $GITLAB_USER_NAME == $PRIMARY_REPO_OWNER      
+     when: on_success  
+   - when: never  # Fallback rule to ensure no other branches trigger the job    
+#
+# Automated testing for staging url 
+#
+AUTOMATED-TESTING-STAGING-URL:  
+  image: alpine
+  stage: staging automated testing
+  environment:
+    name: staging  
+  before_script:
+    - !reference [.print_gitlab_internal_variables, script]     
+    #
+    - echo "AUTOMATED-TESTING-STAGING-URL-001, PRIMARY_REPO_OWNER ==> $PRIMARY_REPO_OWNER"
+    - apk --no-cache add curl
+  script:
+    - echo "AUTOMATED-TESTING-STAGING-URL-002, trigerring URL $STAGING_URL_TESTING test for $GITLAB_USER_NAME on branch $CI_COMMIT_BRANCH"
+    - echo "AUTOMATED-TESTING-STAGING-URL-003, STAGING_URL_TESTING ==> $STAGING_URL_TESTING"
+    #
+    - curl "$STAGING_URL_TESTING" | grep "Movie"
+  needs:
+    - DEPLOY_STAGING_BRANCH              
+  rules:
+    # within the branchs name with a string of "staging" and value of $PRIMARY_REPO_OWNER 
+    - if: $CI_COMMIT_BRANCH =~ /^(?i)(staging)$/ && $GITLAB_USER_NAME == $PRIMARY_REPO_OWNER      
+      when: on_success 
+    - when: never  # Fallback rule to ensure no other branches trigger the job  
+#
+# Automated testing for pre-production url 
+#
+AUTOMATED-TESTING_PRE_PRODUCTION-URL:  
+  image: alpine
+  stage: production automated testing
+  environment:
+    name: production  
+  before_script:
+    - !reference [.print_gitlab_internal_variables, script] 
+    #
+    - echo "AUTOMATED-TESTING_PRE_PRODUCTION-URL-001, PRIMARY_REPO_OWNER ==> $PRIMARY_REPO_OWNER"
+    - apk --no-cache add curl
+  script:
+    #  
+    - echo "AUTOMATED-TESTING_PRE_PRODUCTION-URL-002, trigerring URL $PRODUCTION_URL_TESTING test for $GITLAB_USER_NAME on branch $CI_COMMIT_BRANCH"
+    - echo "AUTOMATED-TESTING_PRE_PRODUCTION-URL-003, PRE_PRODUCTION_URL_TESTING ==> $PRE_PRODUCTION_URL_TESTING"
+    #
+    - curl "$PRE_PRODUCTION_URL_TESTING" | grep "Movie"
+  needs:
+    - DEPLOY_KIND_PRE-PRODUCTION               
+  rules:
+    # within the branch name with a string of "main" and value of $PRIMARY_REPO_OWNER 
+    - if: $CI_COMMIT_BRANCH =~ /^(?i)(main)$/ && $GITLAB_USER_NAME == $PRIMARY_REPO_OWNER      
+      when: on_success  # Ensures the job runs for the "main" branch if the user is the repository owner
+    - when: never  # Fallback rule to ensure no other branches trigger the job  
+#
+# Automated testing for production url 
+#
+AUTOMATED-TESTING_PRODUCTION-URL:  
+  image: alpine
+  stage: production automated testing
+  environment:
+    name: production  
+  before_script:
+    - !reference [.print_gitlab_internal_variables, script] 
+    #
+    - echo "AUTOMATED-TESTING_PRODUCTION-URL-001, PRIMARY_REPO_OWNER ==> $PRIMARY_REPO_OWNER"
+    - apk --no-cache add curl
+  script:
+    #  
+    - echo "AUTOMATED-TESTING_PRODUCTION-URL-002, trigerring URL $PRODUCTION_URL_TESTING test for $GITLAB_USER_NAME on branch $CI_COMMIT_BRANCH"
+    - echo "AUTOMATED-TESTING_PRODUCTION-URL-003, PRODUCTION_URL_TESTING ==> $PRODUCTION_URL_TESTING"
+    #
+    - curl "$PRODUCTION_URL_TESTING" | grep "Movie"
+  needs:
+    - DEPLOY_MICROK8S_PRODUCTION                 
+  rules:
+    # within the branch name with a string of "main" and value of $PRIMARY_REPO_OWNER 
+    - if: $CI_COMMIT_BRANCH =~ /^(?i)(main)$/ && $GITLAB_USER_NAME == $PRIMARY_REPO_OWNER      
+      when: on_success
+    - when: never  # Fallback rule to ensure no other branches trigger the job    

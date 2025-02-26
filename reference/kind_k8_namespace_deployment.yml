@@ -1,0 +1,63 @@
+.kind_k8_namespace_deployment:
+ script:
+ #
+ # Given we are performing this task within a Kind kubernetes
+ # operating as a docker container , we need to setup the context
+ #
+ # For the time being we will sharing this new namespace within the staging king kubernetes cluster  
+ #
+ - kind get kubeconfig --name staging > kubeconfig-staging.yaml; export KUBECONFIG=kubeconfig-staging.yaml
+ #
+ - echo " +++" > temp_kind_setting.tx
+ - echo "NAME_SPACE ==> $NAME_SPACE" >> temp_kind_setting.txt
+ - echo "KIND_CLUSTER_NAME ==> $KIND_CLUSTER_NAME" >> temp_kind_setting.txt
+ - echo "APP_NAME ==> $APP_NAME" >> temp_kind_setting.txt
+ - echo "IMAGE_NAME ==> $IMAGE_NAME" >> temp_kind_setting.txt
+ - echo "EXT_NODE_PORT ==> $EXT_NODE_PORT" >> temp_kind_setting.txt
+ - echo "DOCKER_IMAGE_TAG_TO_PULL ==> $DOCKER_IMAGE_TAG_TO_PULL"  >> temp_kind_setting.txt
+ - echo "IMAGE_NAME ==> $IMAGE_NAME" >> temp_kind_setting.txt
+ - echo "TEMP_NUMBER_OF_K8_WORKERS ==> $TEMP_NUMBER_OF_K8_WORKERS" >> temp_kind_setting.txt
+ - echo " +++" >> temp_kind_setting.txt
+ - cat temp_kind_setting.txt
+ - rm temp_kind_setting.txt
+  #
+  #
+ - echo ".kind_k8_namespace_deployment-001, ==> DOCKER_IMAGE_TAG_TO_PULL ==> $DOCKER_IMAGE_TAG_TO_PULL"
+  #
+ - echo  "$CI_JFROG_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_JFROG_REGISTRY_USER" --password-stdin
+  #
+ - echo ".kind_k8_namespace_deployment-002, docker pull $DOCKER_IMAGE_TAG_TO_PULL"
+ - docker pull "$DOCKER_IMAGE_TAG_TO_PULL" 
+ - echo ".kind_k8_namespace_deployment-004, docker tag $DOCKER_IMAGE_TAG_TO_PULL $IMAGE_NAME"
+ - docker tag "$DOCKER_IMAGE_TAG_TO_PULL" "$IMAGE_NAME"  
+ - docker images    
+  # load the docker image to kind kubernetes
+ - echo ".kind_k8_namespace_deployment-005, local $IMAGE_NAME to cluster kind K8 $KIND_CLUSTER_NAME"
+ - /usr/local/bin/kind load docker-image "$IMAGE_NAME" -n "$KIND_CLUSTER_NAME" 
+  # 
+  # generating the require kind kubernetes (k8) cluster configuration file 
+ - chmod +x ./kind_k8_config.sh
+  #                      "cluster_name" "K8 port" "number of worker(s)"    
+  #- ./kind_k8_config.sh  $KIND_CLUSTER_NAME  $EXT_NODE_PORT $TEMP_NUMBER_OF_K8_WORKERS
+  #- cat kind_k8_config.yaml
+  #
+ - envsubst < kind_k8_user.yaml  > temp_user.yaml
+ - cat temp_user.yaml
+ #
+ # Just for fun and to help with some potential troubleshooting, let go see if the kind K8 staging cluster is running
+ - docker ps | grep -i "$KIND_CLUSTER_NAME" 
+ #
+ #
+ - echo ".kind_k8_namespace_deployment-006, deleting or create namespace $NAME_SPACE, off kind k8 cluster $KIND_CLUSTER_NAME, if required"
+ #
+ - /snap/bin/kubectl get namespace -n "$NAME_SPACE" | grep -i "$NAME_SPACE"  && /snap/bin/kubectl delete -f temp_user.yaml 
+ - /snap/bin/kubectl get namespace -n "$NAME_SPACE" | grep -i "$NAME_SPACE" || /snap/bin/kubectl apply -f temp_user.yaml 
+ #
+ - /snap/bin/kubectl config get-contexts
+ - sleep 15
+ - /snap/bin/kubectl get pod -A
+ #
+ - /snap/bin/kubectl get all -o wide -n "$KIND_CLUSTER_NAME" 
+ #
+ - rm kubeconfig-staging.yaml
+ #

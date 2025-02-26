@@ -1,0 +1,43 @@
+{% extends 'template.html' %}
+
+{% block head %}
+<title>Movie Portal</title>
+{% endblock %}
+
+{% block body %}
+<div class="container">
+    <h1>Movie List - using MongoDB</h1>
+    <p>App Version: {{ app_version }} / App Release Date: {{ app_release_date }}</p> 
+
+    <a href="/add" class="btn">Add New Movie</a>
+    <table>
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Format </th>
+                <th>Director</th>
+                <th>Location</th>
+				<th>Comments</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for mov in movies %}
+            <tr>
+                <td>{{ mov.title }}</td>
+                <td>{{ mov.format}}</td>
+                <td>{{ mov.director }}</td>
+                <td>{{ mov.location }}</td>
+				<td>{{ mov.comments }}</td>
+                <td>
+                    <a href="/edit/{{ mov._id }}" class="btn">Edit</a>
+                    <form action="/delete/{{ mov._id }}" method="POST" style="display:inline;">
+                        <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to delete?')">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,30 @@
+db.dropUser("test");
+
+
+
+db.createUser({
+    user: "test",
+    pwd: "Test1Test1",
+    roles: [
+        { role: "readWrite", db: "staging_movie_db" } ,  
+        {"role": "userAdmin", "db": "staging_movie_db"} ,
+        {"role": "dbAdmin", "db": "staging_movie_db"}
+    ]
+ })
+
+db.getUsers(); 
+
+db.createUser({
+    user: "test",
+    pwd: "Test1Test1",
+    roles: [
+        { role: "readWrite", db: "movie_db" } ,  
+        {"role": "userAdmin", "db": "movie_db"} ,
+        {"role": "dbAdmin", "db": "movie_db"}
+    ]
+ })
+
+db.getUsers(); 
+
+mongosh --host 192.168.1.104 --port 27117 -u test -p Test1Test1 --authenticationDatabase staging_movie_db
+

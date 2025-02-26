@@ -1,7 +1,254 @@
-# Simple Pyhton App to track household movies (DVD / Blu-Ray)
+# Simple python app to track local home movies
 
 During my time with my previous employer, I always aspired to transition into their DevOps/Cloud team to gain hands-on experience in that domain. Unfortunately, it never materialized.
 
-To pursue this interest independently, I developed a small Python application (BETA v1.0) to track all the movies scattered across my home. The project allowed me to simulate real DevOps activities and explore open-source tools to create a basic DevOps environment. The diagram below illustrates a simplified aspect of my approach, with source code to follow (https://github.com/hpilon/movieapps) at some near future date.
+To pursue this interest independently, I developed a small Python application (BETA v1.0) to track all the movies scattered across my home. The project allowed me to simulate real DevOps activities and explore open-source tools to create a basic DevOps environment. The diagram below illustrates a simplified aspect of my approach., 
 
-![movie diagram](overview.drawio.svg)
+# Overview 
+
+![flow](./draw.io-diagrams/overview-Overview.drawio.svg)
+
+# Inventory for this solution utilizing GitLab CE version v17.9.0 , JFROG Container Registry 7.98.7, and MongoDB version 8.0.4 
+
+- System Name:  kind27      
+   
+   - Ubuntu 22.04  
+
+   - Docker version 27.5.1
+
+   - kind version 0.25.0
+
+   - Kustomize Version: v5.4.2
+
+   - nginx/1.18.0 (Ubuntu)
+
+- System Name:  kind28      
+   
+   - Ubuntu 24.04  
+
+   - Docker version 27.5.1
+
+   - kind version 0.26.0
+
+   - Kustomize Version: v5.4.2   
+
+   - nginx/1.18.0 (Ubuntu)
+
+- System Name:  kind26      
+   
+   - Ubuntu 22.04  
+
+   - MicroK8s v1.31.5 revision 7661 
+
+   - Kustomize Version: v5.4.2
+
+## Concept
+
+![flow](./draw.io-diagrams/overview-Flow.drawio.svg)
+
++++
+
+Release BETA v 1.0 
+
+**The intention behind this project was to explore how a potential DevOps environment, utilizing a CI/CD pipeline could function & operate. This project is designed as a learning opportunity and does not represent a real production DevOps environment.** 
+
++++
+
+**General concept:**
+
+ The “test1” account (user) is the main account allowed to run the staging pipeline automatically (under the staging branch) and promote the solution to production (under the main branch) triggered manually.
+
+ Each accounts has their own virtual space to develop and test their application based on specific branch name before the code can be promoted to staging and eventually production. This was mostly done because of the limited system and kubernetes resources within my **home lab**.
+
+ As an example, user “test3” does all the code changes under the "feature" or “dev” branches after a fork of “test1” “main” branch. Within the GitLab pipeline configuration file (**.gitlab-ci.yml**) you will notice the pipeline script invoking different phases and staging actions. 
+
+User "test3" can review the results of their application or code changes once the pipeline successfully completes by navigating to GitLab → Operate → Environments → review/test3 and opening the "Open" tab on the right.
+
+![Operate-Env](./draw.io-diagrams/Operate-Env.jpg)
+
+![Operate-Env-2](./draw.io-diagrams/Operate-Env-2.jpg)
+
+Once user "test3" is satisfied with their code changes, they submit a merge request to the "test1" staging branch. User "test1" then reviews the request and either approves or rejects it.
+
+If approved (by merging into the staging branch), this automatically triggers the staging pipeline.
+
+If everything looks good, user "test1" merges the staging branch into the main branch and manually triggers the GitLab pipeline for deployment.
+
+ # Important Notes:
+
+### Note 1:
+
+Because we are using an Nginx reverse proxy in front of the **"Kind"** Kubernetes cluster, and the GitLab local account (gitlab-runner) typically has limited privileges, I had to grant sudo privileges to the gitlab-runner account. This allows it to modify the Nginx reverse proxy configuration file as needed.
+
+Realizing this could of been address in a different way, I opted to do it this way for now, will optimized this approach at some future release
+
+- using "visudo" off the ubuntu system as root, below is an example of what I included
+
+```
+# Need to add some privilege to the gitlab-runner account on this system
+# to manipulate nginx reverse proxy configure file.
+# For the time being, I'm allowing full priv to that local account of this system.
+# Future release will lock down this approach a bit more. 
+#
+# In support of the kind kubernetes and microk8s kubernetes 
+
+ gitlab-runner ALL=(ALL) NOPASSWD: ALL
+```
+
+### Note 2:
+
+ The same is required for the microk8s system for the gitlab-runner account as outlined in "Note 1" 
+
+### Note 3: 
+
+ Using GitLab !reference capabilities as a function, 
+ implying this GitLab pipeline script is the main controlling pipeline script 
+
+ ### Note 4:
+
+ Because I'm using **"Kind" kubernetes** on ubuntu 22.02 & 24.04 , there is know issues with this error 
+ 
+ **Pod errors due to “too many open files”**
+ 
+ This may be caused by running out of inotify resources. 
+ 
+ Resource limits are defined by fs.inotify.max_user_watches 
+ and fs.inotify.max_user_instances system variables. 
+ 
+ For example, in Ubuntu these default to 8192 and 128 respectively, which is not enough to create a cluster with many nodes.
+
+ To increase these limits temporarily run the following commands on the host:
+
+ sudo sysctl fs.inotify.max_user_watches=524288
+ sudo sysctl fs.inotify.max_user_instances=512
+
+ To make the changes persistent, edit the file /etc/sysctl.conf and add these lines:
+ 
+ fs.inotify.max_user_watches = 524288
+ fs.inotify.max_user_instances = 512
+
+### Note 5:
+ 
+ Because I'm using "self signed" cert with JFROG Container registry, I need to allow any of the systems
+ local docker registry to trust the self-signed cert by adding this option  
+
+``` 
+ cat /etc/docker/daemon.json
+{
+ "insecure-registries": ["jfrog.pilon.org"]
+}
+```
+
+
+ and restart docker service 
+
+ This will allow to pull any docker images or source code from JFROG 
+
+
+## .gitlab-ci.yml GitLab pipeline 
+
+Review this script to better understand the overall flow and logic around this BETA v 1.0 release 
+
+![overview-pipeline](./draw.io-diagrams/overview-pipeline.drawio.svg)
+
+## OPTIONAL-curl-command bash script 
+
+Given this is release BETA v 1.0, for the time being I'm utilizing GitLab internal mechanism to gather different credentials for different purpose. 
+
+These required internal GitLab global variables can be found under the specific project.  
+
+![gitlab-internal-protected-variables](./draw.io-diagrams/gitlab-internal-protected-variables.jpg)
+
+I would **strongly encourage** to review the  OPTIONAL-curl-command.sh bash script to better understand what credential variables required for each individual account / user.
+
+This script will ask several credential questions (username / password), including GitLab account **token** and **project ID** based on the simulated account / user. If you opted to utilize the JFROG Container Registry like I have, you will also need a **JFROG TOKEN**. This is the area were you may need to make adjustments to the entire concept / solution.
+
+### Token example 
+
+![token](./draw.io-diagrams/token.jpg)
+
+![token-2](./draw.io-diagrams/token-2.jpg)
+
+![token-3](./draw.io-diagrams/token-3.jpg)
+
+![token-4](./draw.io-diagrams/token-4.jpg)
+
+### Project number ( ID )
+
+![project-id](./draw.io-diagrams/project-id.jpg)
+
+## NGINX Reverse proxy 
+
+Due to Kind Kubernetes running as Docker containers, I chose to use NGINX reverse proxy to isolate multiple Kind Kubernetes clusters on the same Ubuntu system. This setup allowed me to simulate a virtual environment for each users, ensuring separation and controlled access while maintaining flexibility in deployment. 
+
+**The implication is that NGINX software installed on all the targeted systems  where the "Kind Kubernetes will be utilize.** 
+
+![nginx reverse-proxy-2](./draw.io-diagrams/overview-reverse-proxy-2.drawio.svg)
+
+# Staging and Pre-production K8 namespaces share the same kind kubernetes cluster 
+
+Just to add some extract fun, you will notice from the above and below diagrams that both the staging and movie pre-produtcion K8 namespace will be operating within the staging Kind Kubernetes cluster. **The implication is that the staging stage / phase must be executed prior to unblocking/releasing the pre-production &  production deployment phase/stage** 
+
+![nginx reverse-proxy](./draw.io-diagrams/overview-reverse-proxy.drawio.svg)
+
+# Security
+
+You will notice I did include some open source security scanners within the pipeline, although limited in nature. I also left some of the errors the scans identified  for review given this project is for learning purposes.  
+
+# MongoDB
+
+Within this project I opted to utilize mongodb in a **shard** configuration as I wanted to experiment with MongoDB is a bit more.  
+
+A MongoDB sharded cluster is a distributed database architecture that partitions data across multiple servers (shards) to improve scalability, performance, and fault tolerance. Sharding enables MongoDB to handle large datasets and high-throughput operations by distributing data based on a shard key. Each shard operates as an independent database, and a mongos router directs queries to the appropriate shards. A config server maintains metadata and manages cluster configurations. This approach ensures horizontal scaling and helps balance the load across nodes while maintaining high availability.
+
+How it Works:
+
+- Data Partitioning: MongoDB partitions data across shards based on the shard key.
+
+- Query Routing: The mongos router determines which shard(s) store the relevant data and directs queries accordingly.
+ 
+- Metadata Management: Config servers maintain a mapping of shard key ranges to shards.
+
+- Replication & High Availability: Each shard is typically a replica set, ensuring redundancy and fault tolerance.
+
+## create_mongodb_container_v4.sh script
+
+I create this script to run the above MongoDB configuration as docker containers in order to save system resources. Feel free to use it or create your own. 
+
+# Kind kubernetes cluster and kubectl command
+
+I create this **kind_cluster_context_and-notes.txt** file to help with isolating the different Kind kubernetes cluster that maybe operating off the same Ubuntu system when using the kubectl command. 
+
+```
+kind get kubeconfig --name test1 > kubeconfig-test1.yaml ; export KUBECONFIG=kubeconfig-test1.yaml
+
+kind get kubeconfig --name test2 > kubeconfig-test2.yaml ; export KUBECONFIG=kubeconfig-test2.yaml
+
+kind get kubeconfig --name test3 > kubeconfig-test3.yaml ; export KUBECONFIG=kubeconfig-test3.yaml
+
+kind get kubeconfig --name test4 > kubeconfig-test4.yaml ; export KUBECONFIG=kubeconfig-test4.yaml
+
+#
+# Keep in mind that both the staging and movie K8 namespaces share the same Kind Kubernetes cluster, 
+# in this case being the staging Kind kubernetes cluster 
+#
+
+kind get kubeconfig --name staging > kubeconfig-staging.yaml; export KUBECONFIG=kubeconfig-staging.yaml
+
+#
+kubectl config get-contexts
+#
+kubectl exec -it <pod name>> -n <name space> -- bash
+#
+#
+# to logon into a specific pod 
+
+Example:
+
+kubectl get pod -n test3
+
+# once you know the pod name 
+
+kubectl exec -it movie-deployment-<XXXXXXXX> -n test3 -- bash
+
+```

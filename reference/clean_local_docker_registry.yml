@@ -1,0 +1,7 @@
+.clean_local_docker_registry:
+ script:
+  #
+  # clean the local system docker REGISTRY
+  - echo ".clean_local_docker_registry-001, clean the local system docker registry using this script clean_local_docker_registry_not_used.sh"
+  - chmod +x clean_local_docker_registry_not_used.sh
+  - ./clean_local_docker_registry_not_used.sh    

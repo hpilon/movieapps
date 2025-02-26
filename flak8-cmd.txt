@@ -1,0 +1,4 @@
+#
+# Command to rush from the bash shell
+# 
+flake8 --format=html --htmldir=flake_reports

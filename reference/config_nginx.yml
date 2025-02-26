@@ -1,0 +1,80 @@
+.config_nginx:
+ script:
+  #
+  #
+  # We now need to take care of the nginx reverse proxy off KIND_K8_SYSTEM_RUN_ON_28
+  # 
+  # 
+  # Creating the dynamic part of the nginx reverse proxy file
+  #
+  # Because we are running under the gitlab-runner account
+  # normally with limited privilege, and the next section
+  # required some privilege to manipulate the nginx reverse proxy configuration file
+  # I needed to add an sudo entry for the gitlab-runner account 
+  #
+  # using "visudo", below is example of what I included 
+  ##
+  ## need to add some privilege to the gitlab-runner account on this system
+  ## to manipulate nginx reverse proxy configure file
+  ##
+  ## gitlab-runner ALL=(ALL) NOPASSWD: ALL
+  #
+  # Cleaning things up
+  #
+  # first let clean up the default to deny access 
+  - sudo ls -l /etc/nginx/sites-enabled/
+  - sudo ls -l /etc/nginx/sites-available/
+  #
+  # first let clean up the default to deny access 
+  - echo ".config_nginx-001, check if /etc/nginx/sites-available/default file exist" 
+  - if [ -e "/etc/nginx/sites-enabled/default" ]; then
+  -     echo ".config_nginx-002, file /etc/nginx/sites-available/default exist, deleting it to clean old junk" 
+  -     sudo rm /etc/nginx/sites-enabled/default
+  -     sudo rm /etc/nginx/sites-available/default
+  #
+  -     echo ".config_nginx-003, recreating file /etc/nginx/sites-available/default" 
+  -     sudo cp default_nginx.txt  /etc/nginx/sites-available/default
+  -     sudo ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/        
+  - fi  
+  #
+  - echo ".config_nginx-004, remove /etc/nginx/sites-available/$TEMP_NGINX_REV_PROXY_FILE file, if exist" 
+  - if [ -e "/etc/nginx/sites-enabled/$TEMP_NGINX_REV_PROXY_FILE" ]; then
+  -    echo ".config_nginx-001, Need to delete $TEMP_NGINX_REV_PROXY_FILE"        
+  -    sudo rm /etc/nginx/sites-enabled/$TEMP_NGINX_REV_PROXY_FILE
+  -    sudo rm /etc/nginx/sites-available/$TEMP_NGINX_REV_PROXY_FILE
+  - fi  
+  #      
+  - echo ".config_nginx-005, Creating /etc/nginx/sites-available/$TEMP_NGINX_REV_PROXY_FILE file"         
+  #
+  # Create the new nginx file 
+  #
+  - echo "server {" > $TEMP_NGINX_REV_PROXY_FILE
+  - echo "    listen 80;" >> $TEMP_NGINX_REV_PROXY_FILE
+  - echo "    server_name $TEMP_SERVER_REV_PROXY_NAME;" >> $TEMP_NGINX_REV_PROXY_FILE
+  - echo " " >> $TEMP_NGINX_REV_PROXY_FILE
+  - echo "    location / {" >> $TEMP_NGINX_REV_PROXY_FILE
+  - echo "       proxy_pass $TEMP_PROXY_URL_SETTING;" >> $TEMP_NGINX_REV_PROXY_FILE
+  #
+  # Because the remaining part of the nginx congif file is static
+  # we use a template concept ,and merge it to part2_temp_nginxt file 
+  #
+  - cat part2_temp_nginxt.txt >> $TEMP_NGINX_REV_PROXY_FILE
+  #
+  # Copy the new nginx reverse proxy file 
+  #
+  - sudo cp $TEMP_NGINX_REV_PROXY_FILE /etc/nginx/sites-available/$TEMP_NGINX_REV_PROXY_FILE
+  # 
+  # Check to see what the file looks like now
+  #
+  - sudo cat /etc/nginx/sites-available/$TEMP_NGINX_REV_PROXY_FILE
+  #
+  - sudo ln -s /etc/nginx/sites-available/$TEMP_NGINX_REV_PROXY_FILE /etc/nginx/sites-enabled/
+  #
+  # Before we reloading the nginx service , let's make sure the nginx syntax is correct 
+  #
+  #sudo nginx -t
+  - echo ".config_nginx-006 ==> systemctl status nginx -l"
+  - sudo systemctl status nginx -l
+  - echo ".config_nginx-007 ==> sudo systemctl reload nginx"
+  - sudo systemctl reload nginx 
+  #     
