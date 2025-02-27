@@ -95,21 +95,3 @@ try:
 
 except OperationFailure as e:
     print(f"Failed to check or create user: {e}")
-
-
-# Step 8: Create an admin user for the database
-# try:
-#     Check if the user exists
-#     existing_user = db.command("usersInfo", MONGO_APP_DB_USER)
-
-#    if existing_user["users"]:
-#        print(f"User '{MONGO_ADMIN_DB_USER}' already exists.")
-#    else:
-#        Create user if it does not exist
-#        db.command("createUser", MONGO_APP_DB_USER,
-#                   pwd=MONGO_ADMIN_DB_PASS,
-#                   roles=[{"role": "dbOwner", "db": MONGO_DB_NAME}])
-#        print(f"User '{MONGO_APP_DB_USER}' created successfully, and granted the role of readWrite")
-#
-# except OperationFailure as e:
-#    print(f"Failed to check or create user: {e}")
