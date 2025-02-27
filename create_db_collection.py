@@ -39,9 +39,7 @@ print(f"MONGO_HOST_2 '{MONGO_HOST_2}'")
 print(f"MONGO_PORT_1 '{MONGO_PORT_1}'")
 print(f"MONGO_PORT_2 '{MONGO_PORT_2}'")
 print(f"MONGO_ADMIN_DB_USER '{MONGO_ADMIN_DB_USER}'")
-# print(f"MONGO_ADMIN_DB_PASS  '{MONGO_ADMIN_DB_PASS}'")
 print(f"MONGO_APP_DB_USER '{MONGO_APP_DB_USER}'")
-# print(f"MONGO_APP_DB_PASS '{MONGO_APP_DB_PASS}'")
 
 if not MONGO_DB_NAME:
     print("Database name not provided. Set MONGO_DB_NAME in the environment (.env) file.")
