@@ -1,4 +1,4 @@
 # JFROG Registry TOKEN I'm using  
 #  being base64-encoded JFROG/Docker credentials
 #
-eyJhdXRocyI6eyJodHRwczovL2pmcm9nLnBpbG9uLm9yZyI6eyJ1c2VybmFtZSI6ImhwaWxvbiIsInBhc3N3b3JkIjoiS2FyZW4xS2FyZW4xIiwiZW1haWwiOiJocGlsb25Abm9yZXBseS5jb20iLCJhdXRoIjoiYUhCcGJHOXVPa3RoY21WdU1VdGhjbVZ1TVE9PSJ9fX0=
+
