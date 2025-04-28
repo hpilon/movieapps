@@ -1,4 +1,0 @@
-# JFROG Registry TOKEN I'm using  
-#  being base64-encoded JFROG/Docker credentials
-#
-
