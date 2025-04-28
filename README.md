@@ -261,7 +261,7 @@ The script **"create_mongodb_container_v5.1.sh"** includes the use of:
 
 ---
 
-# 🧐 **Summary:**
+🧐 **Summary:**
 
 | Product | Best For |
 |:--------|:---------|
@@ -272,7 +272,7 @@ The script **"create_mongodb_container_v5.1.sh"** includes the use of:
 
 ---
 
-# 📌 Important Notes:
+📌 Important Notes:
 - **Percona Server for MongoDB (PSMDB)** is MongoDB with **enterprise-grade features for free**.
 - **Percona MongoDB Professional** is **professional services and support** on top of PSMDB or MongoDB CE/Enterprise.
 
