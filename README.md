@@ -48,7 +48,7 @@ To pursue this interest independently, I developed a small Python application (B
 
 +++
 
-Release BETA v 1.0 
+🧐 Release BETA v 1.1 
 
 **The intention behind this project was to explore how a potential DevOps environment, utilizing a CI/CD pipeline could function & operate. This project is designed as a learning opportunity and does not represent a real production DevOps environment.** 
 
@@ -74,7 +74,7 @@ If approved (by merging into the staging branch), this automatically triggers th
 
 If everything looks good, user "test1" merges the staging branch into the main branch and manually triggers the GitLab pipeline for deployment.
 
- # Important Notes:
+✅ Important Notes:
 
 ### Note 1:
 
