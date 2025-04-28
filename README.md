@@ -236,7 +236,7 @@ The script **"create_mongodb_container_v5.1.sh"** includes the use of:
 
 **- The outcome of this script is NOT supported by MongoDB Inc or by Percona under any of their commercial support subscriptions or otherwise**
 
-# 📌 Script can be found here now: [[Hyperlink]](https://github.com/hpilon/MongoDB) - https://github.com/hpilon/MongoDB
+📌 Script can be found here now: [[Hyperlink]](https://github.com/hpilon/MongoDB) - https://github.com/hpilon/MongoDB
 
 
 ## Comparison if MongoDB CE vs PErcona MongoDB 
