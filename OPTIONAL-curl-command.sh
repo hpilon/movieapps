@@ -34,17 +34,17 @@ function script_introduction {
    echo "++++++++++++++++++++++++"
    echo 
    echo "This script reflects a way to create GitLab CI/CD protected variables"
-   echo "in a semi-autmated fashion, when dealing with user and password "
+   echo "in a semi-automated fashion, when dealing with user and password "
    echo "in the main GitLab pipeline file (.gitlab-ci.yml)"
    echo 
-   echo  "GitLab documenation that maybe of some interest"
+   echo  "GitLab documentation that maybe of some interest"
    echo  "https://docs.gitlab.com/ee/api/project_level_variables.html"
    echo 
    echo "The private & protected variables are defined within "\""settings"\"" , "\""CI/CD"\"", "\""variables"\""" 
    echo  "on the left hand side of the GitLab GUI for the specific project." 
    echo 
    echo  "Project ID is ia available by this GitLab internal variable \$CI_PROJECT_ID = <PROJECT ID> below" 
-   echo  "of by looking at the project itself (3 square dots on the top left cornner of the project)"
+   echo  "of by looking at the project itself (3 square dots on the top left corner of the project)"
    echo 
    echo "The key here is the project id of the project that needs to be identified prior to performing this post command"
    echo  "curl --request POST "\""http://maingitlab.pilon.org/api/v4/projects/<PROJECT ID>/variables"\""" 
@@ -108,7 +108,7 @@ function get_frog_registry_info {
  fi 
 
  echo -e "${CYAN}"
- read -s -p "             Please RE-Enter the passsord " PASSW1CHECK
+ read -s -p "             Please RE-Enter the password " PASSW1CHECK
  echo -e "${NC}"
 
  if [[ $PASSW1CHECK = "" ]]; then
@@ -164,7 +164,7 @@ function get_mongodb_adm_info {
  fi 
 
  echo -e "${CYAN}"
- read -s -p "             Please RE-Enter the passsord " PASSW1CHECK
+ read -s -p "             Please RE-Enter the password " PASSW1CHECK
  echo -e "${NC}"
 
  if [[ $PASSW1CHECK = "" ]]; then
@@ -278,7 +278,7 @@ function get_mongodb_prod_app_info {
  fi 
 
  echo -e "${CYAN}"
- read -s -p "             Please RE-Enter the passsord " PASSW1CHECK
+ read -s -p "             Please RE-Enter the password " PASSW1CHECK
  echo -e "${NC}"
 
  # echo "$RESP_MONGODB_PROD_APP_PASSW, $PASSW1CHECK"
@@ -337,7 +337,7 @@ function get_mongodb_staging_info {
  fi 
 
  echo -e "${CYAN}"
- read -s -p "            Please RE-Enter the passsord " PASSW1CHECK
+ read -s -p "            Please RE-Enter the password " PASSW1CHECK
  echo -e "${NC}"
 
  if [[ $PASSW1CHECK = "" ]]; then
@@ -993,7 +993,7 @@ function help_menu_function() {
 echo
 echo -e "${BOLD}Please select one of the options as outlined below:${NC}"
 echo
-echo -e "      ${CYAN}${BOLD} It's important that the information entered matches what you previouly configured ${NC}"
+echo -e "      ${CYAN}${BOLD} It's important that the information entered matches what you previously configured ${NC}"
 echo -e "      ${CYAN}${BOLD} on the mongodb side and JFROG Registry side ${NC}"
 echo -e "      ${CYAN}${BOLD} You may need to modify this script \$GITLAB_HOST global variable as it is hard-coded to $GITLAB_HOST${NC}"
 echo
