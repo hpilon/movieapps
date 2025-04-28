@@ -239,7 +239,7 @@ The script **"create_mongodb_container_v5.1.sh"** includes the use of:
 📌 Script can be found here now: [[Hyperlink]](https://github.com/hpilon/MongoDB) - https://github.com/hpilon/MongoDB
 
 
-## Comparison if MongoDB CE vs PErcona MongoDB 
+## Comparison if MongoDB CE vs Percona MongoDB (PSMDB)
 
 # 📊 MongoDB Products Comparison
 
