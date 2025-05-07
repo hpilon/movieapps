@@ -214,6 +214,8 @@ How it Works:
 
 ## create_mongodb_container_v5.1.sh script
 
+![MongoDB Overview](./draw.io-diagrams/overview-MongoDB.drawio.svg)
+
 ℹ️ **Information:**
 
 The script **"create_mongodb_container_v5.1.sh"** includes the use of:
